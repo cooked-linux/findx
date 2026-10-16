@@ -916,6 +916,7 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "fuzzy-matcher",
+ "libc",
  "mime_guess",
  "nix",
  "rayon",
