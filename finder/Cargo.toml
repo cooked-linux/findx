@@ -3,4 +3,12 @@ name = "finder"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
+shared = { path = "../shared" }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros"] }

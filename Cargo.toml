@@ -1,3 +1,28 @@
 [workspace]
-resolver = "2"
-members = ["finder", "spotlight", "shared"]
+resolver = "3"
+members = [
+    "finder",
+    "shared",
+    "spotlight",
+]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
