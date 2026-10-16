@@ -27,6 +27,10 @@ pub enum DbError {
     /// Serialization or deserialization error during database interaction.
     #[error("database serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    /// Filesystem or I/O error during database initialization or file operations.
+    #[error("database i/o error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 impl DbError {
