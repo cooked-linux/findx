@@ -36,3 +36,4 @@ zbus = { version = "5.5", features = ["tokio"] }
 
 [dev-dependencies]
 tempfile = "3.17"
+tokio = { version = "1.43", features = ["macros"] }

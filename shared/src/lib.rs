@@ -3,6 +3,7 @@
 pub mod db;
 pub mod errors;
 pub mod fs;
+pub mod ipc;
 pub mod models;
 
 pub use db::{
@@ -17,6 +18,13 @@ pub use fs::{
     get_tags, is_same_filesystem, list_trash_items, lstat_path, move_to_trash, natural_cmp,
     parse_trash_info, remove_comment, remove_origin_url, remove_tags, restore_from_trash,
     set_comment, set_origin_url, set_tags, stat_path,
+};
+pub use ipc::{
+    DEFAULT_TIMEOUT, DeviceEvent, DriveConnectionType, FileManagerClient, FileManagerProxy,
+    GlobalShortcutsClient, GlobalShortcutsProxy, Login1Client, Login1ManagerProxy,
+    MountedVolume, SessionHandle, ShortcutActivation, UDisks2Monitor, file_uri_to_path,
+    get_session_connection, get_system_connection, is_session_bus_available,
+    is_system_bus_available, path_to_file_uri, reset_connections_for_test,
 };
 pub use models::{
     AggregatedSearchResults, BatchOperation, CategorySection, FileItem, FileMetadata, FileTag,
