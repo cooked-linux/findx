@@ -1,6 +1,6 @@
 //! Tag cache table management and fast lookup helpers.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::DbError;
@@ -113,7 +113,8 @@ pub fn remove_tag(conn: &Connection, path: &str, tag_name: &str) -> Result<bool,
 ///
 /// Returns a [`DbError`] if SQLite query fails.
 pub fn query_paths_by_tag(conn: &Connection, tag_name: &str) -> Result<Vec<String>, DbError> {
-    let mut stmt = conn.prepare("SELECT path FROM tag_cache WHERE tag_name = ?1 ORDER BY path ASC;")?;
+    let mut stmt =
+        conn.prepare("SELECT path FROM tag_cache WHERE tag_name = ?1 ORDER BY path ASC;")?;
     let rows = stmt.query_map(params![tag_name], |row| row.get(0))?;
 
     let mut paths = Vec::new();
@@ -196,7 +197,10 @@ pub fn remove_stale_paths<T: AsRef<str>>(
     let mut total_deleted = 0;
 
     for path in stale_paths {
-        total_deleted += tx.execute("DELETE FROM tag_cache WHERE path = ?1;", params![path.as_ref()])?;
+        total_deleted += tx.execute(
+            "DELETE FROM tag_cache WHERE path = ?1;",
+            params![path.as_ref()],
+        )?;
     }
 
     tx.commit()?;
@@ -214,6 +218,12 @@ pub fn count_all_tags(conn: &Connection) -> Result<usize, DbError> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
     use crate::db::migrations::apply_migrations;
@@ -228,9 +238,24 @@ mod tests {
     fn test_upsert_and_query_tags() {
         let conn = setup_tags_db();
 
-        let entry1 = TagCacheEntry::new("/path/to/doc.pdf", "Work", Some("Blue".into()), 1_700_000_000);
-        let entry2 = TagCacheEntry::new("/path/to/doc.pdf", "Invoice", Some("Green".into()), 1_700_000_000);
-        let entry3 = TagCacheEntry::new("/path/to/other.txt", "Work", Some("Blue".into()), 1_700_000_100);
+        let entry1 = TagCacheEntry::new(
+            "/path/to/doc.pdf",
+            "Work",
+            Some("Blue".into()),
+            1_700_000_000,
+        );
+        let entry2 = TagCacheEntry::new(
+            "/path/to/doc.pdf",
+            "Invoice",
+            Some("Green".into()),
+            1_700_000_000,
+        );
+        let entry3 = TagCacheEntry::new(
+            "/path/to/other.txt",
+            "Work",
+            Some("Blue".into()),
+            1_700_000_100,
+        );
 
         upsert_tag(&conn, &entry1).expect("upsert 1");
         upsert_tag(&conn, &entry2).expect("upsert 2");
@@ -249,12 +274,20 @@ mod tests {
         assert_eq!(doc_tags[1].tag_name, "Work");
 
         // Update tag color on conflict
-        let entry1_updated = TagCacheEntry::new("/path/to/doc.pdf", "Work", Some("Red".into()), 1_700_000_200);
+        let entry1_updated = TagCacheEntry::new(
+            "/path/to/doc.pdf",
+            "Work",
+            Some("Red".into()),
+            1_700_000_200,
+        );
         upsert_tag(&conn, &entry1_updated).expect("update 1");
         assert_eq!(count_all_tags(&conn).expect("count"), 3);
 
         let updated_tags = query_tags_for_path(&conn, "/path/to/doc.pdf").expect("query updated");
-        let work_tag = updated_tags.iter().find(|t| t.tag_name == "Work").expect("work tag");
+        let work_tag = updated_tags
+            .iter()
+            .find(|t| t.tag_name == "Work")
+            .expect("work tag");
         assert_eq!(work_tag.tag_color.as_deref(), Some("Red"));
         assert_eq!(work_tag.mtime, 1_700_000_200);
     }
@@ -303,4 +336,3 @@ mod tests {
         assert_eq!(count_all_tags(&conn).expect("count"), 1); // 1 remaining on /b
     }
 }
-

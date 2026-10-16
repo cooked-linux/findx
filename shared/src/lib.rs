@@ -6,17 +6,17 @@ pub mod fs;
 pub mod models;
 
 pub use db::{
-    configure_connection, default_db_path, Database, FrecencyAggregate, FrecencyEvent, FtsDocument,
-    FtsQueryBuilder, FtsSearchResult, Migration, TagCacheEntry,
+    Database, FrecencyAggregate, FrecencyEvent, FtsDocument, FtsQueryBuilder, FtsSearchResult,
+    Migration, TagCacheEntry, configure_connection, default_db_path,
 };
 
 pub use errors::{DbError, FsError, IpcError, ModelError, Result, SharedError, XattrError};
 pub use fs::{
-    clone_file, clone_file_with_progress, empty_trash, get_comment, get_origin_url, get_tags,
-    is_same_filesystem, list_trash_items, lstat_path, move_to_trash, natural_cmp, parse_trash_info,
-    remove_comment, remove_origin_url, remove_tags, restore_from_trash, set_comment,
-    set_origin_url, set_tags, stat_path, EnhancedStat, InodeKey, TrashInfo, TrashedItem,
-    XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL, XATTR_TAGS,
+    EnhancedStat, InodeKey, TrashInfo, TrashedItem, XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL,
+    XATTR_TAGS, clone_file, clone_file_with_progress, empty_trash, get_comment, get_origin_url,
+    get_tags, is_same_filesystem, list_trash_items, lstat_path, move_to_trash, natural_cmp,
+    parse_trash_info, remove_comment, remove_origin_url, remove_tags, restore_from_trash,
+    set_comment, set_origin_url, set_tags, stat_path,
 };
 pub use models::{
     AggregatedSearchResults, BatchOperation, CategorySection, FileItem, FileMetadata, FileTag,

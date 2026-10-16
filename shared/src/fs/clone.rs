@@ -80,7 +80,12 @@ fn open_clone_pair(
         .open(dst)
         .map_err(|e| FsError::io(dst, e))?;
 
-    Ok(Some((src_file, dst_file, total_bytes, metadata.permissions())))
+    Ok(Some((
+        src_file,
+        dst_file,
+        total_bytes,
+        metadata.permissions(),
+    )))
 }
 
 /// Clones or copies a file from `src` to `dst` with real-time progress callbacks
@@ -108,8 +113,7 @@ where
         .into());
     }
 
-    let Some((mut src_file, mut dst_file, total_bytes, permissions)) =
-        open_clone_pair(src, dst)?
+    let Some((mut src_file, mut dst_file, total_bytes, permissions)) = open_clone_pair(src, dst)?
     else {
         on_progress(0, 0);
         return Ok(0);
@@ -299,7 +303,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(!dst_path.exists(), "destination file must be cleaned up on cancellation");
+        assert!(
+            !dst_path.exists(),
+            "destination file must be cleaned up on cancellation"
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Full-text search (FTS5) queries, document indexing, and ranking.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::errors::DbError;
 
@@ -302,7 +302,11 @@ pub fn count_documents(conn: &Connection) -> Result<usize, DbError> {
 /// # Errors
 ///
 /// Returns a [`DbError`] if query execution fails.
-pub fn search(conn: &Connection, query: &str, limit: usize) -> Result<Vec<FtsSearchResult>, DbError> {
+pub fn search(
+    conn: &Connection,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<FtsSearchResult>, DbError> {
     FtsQueryBuilder::new(query)
         .prefix(true)
         .limit(limit)
@@ -310,6 +314,12 @@ pub fn search(conn: &Connection, query: &str, limit: usize) -> Result<Vec<FtsSea
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
     use crate::db::migrations::apply_migrations;
@@ -399,7 +409,11 @@ mod tests {
             .execute(&conn)
             .expect("query safety");
         assert_eq!(snippet_results.len(), 1);
-        assert!(snippet_results[0].snippet.contains("<highlight>safety</highlight>"));
+        assert!(
+            snippet_results[0]
+                .snippet
+                .contains("<highlight>safety</highlight>")
+        );
     }
 
     #[test]
@@ -407,8 +421,10 @@ mod tests {
         assert_eq!(sanitize_query("hello world", false), "hello world");
         assert_eq!(sanitize_query("hello world", true), "hello* world*");
         assert_eq!(sanitize_query("file* test", false), "file* test");
-        assert_eq!(sanitize_query("malicious'; DROP TABLE--", false), "malicious DROP TABLE");
+        assert_eq!(
+            sanitize_query("malicious'; DROP TABLE--", false),
+            "malicious DROP TABLE"
+        );
         assert_eq!(sanitize_query("   ", false), "");
     }
 }
-

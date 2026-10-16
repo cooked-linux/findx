@@ -2,7 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::DbError;
@@ -226,11 +226,19 @@ pub fn prune_events_before(conn: &Connection, before_timestamp: i64) -> Result<u
 ///
 /// Returns a [`DbError`] if querying SQLite fails.
 pub fn count_all_events(conn: &Connection) -> Result<usize, DbError> {
-    let count: i64 = conn.query_row("SELECT COUNT(1) FROM frecency_events;", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row("SELECT COUNT(1) FROM frecency_events;", [], |row| {
+        row.get(0)
+    })?;
     Ok(usize::try_from(count).unwrap_or(0))
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
     use crate::db::migrations::apply_migrations;
@@ -280,7 +288,8 @@ mod tests {
         record_event(&conn, "code.desktop", "app", "open", 250, None).expect("rec");
         record_event(&conn, "/home/file.txt", "file", "open", 150, None).expect("rec");
 
-        let window_cnt = count_events_in_window(&conn, "code.desktop", 150, 250).expect("count window");
+        let window_cnt =
+            count_events_in_window(&conn, "code.desktop", 150, 250).expect("count window");
         assert_eq!(window_cnt, 2); // timestamp 200 launch, 250 open
 
         // Aggregates for all item types
@@ -312,4 +321,3 @@ mod tests {
         assert_eq!(count_all_events(&conn).expect("count"), 1);
     }
 }
-

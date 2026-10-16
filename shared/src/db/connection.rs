@@ -141,6 +141,12 @@ impl DerefMut for Database {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
 
@@ -179,7 +185,11 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode;", [], |row| row.get(0))
             .expect("query journal_mode");
-        assert_eq!(journal_mode.to_uppercase(), "WAL", "journal_mode must be WAL on disk");
+        assert_eq!(
+            journal_mode.to_uppercase(),
+            "WAL",
+            "journal_mode must be WAL on disk"
+        );
 
         // Migrate again should return 0 since already applied
         let applied = db.migrate().expect("idempotent migration");
@@ -199,4 +209,3 @@ mod tests {
         assert_eq!(applied, 1, "first migration should apply 1 version");
     }
 }
-

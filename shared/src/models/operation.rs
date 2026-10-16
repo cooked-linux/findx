@@ -215,7 +215,9 @@ impl BatchOperation {
     /// Returns [`ModelError::Validation`] if sources are empty or required destination is missing.
     pub fn validate(&self) -> Result<(), ModelError> {
         if self.sources.is_empty() {
-            return Err(ModelError::validation("batch operation sources cannot be empty"));
+            return Err(ModelError::validation(
+                "batch operation sources cannot be empty",
+            ));
         }
         for src in &self.sources {
             if src.as_os_str().is_empty() {
@@ -262,7 +264,10 @@ pub struct ProgressReport {
 impl ProgressReport {
     /// Constructs a new [`ProgressReport`].
     #[must_use]
-    #[expect(clippy::too_many_arguments, reason = "progress metric snapshot reporting")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "progress metric snapshot reporting"
+    )]
     pub fn new(
         operation_id: impl Into<String>,
         completed_items: u64,
@@ -347,8 +352,14 @@ mod tests {
         assert!(OperationKind::Copy.requires_destination());
         assert!(!OperationKind::Trash.requires_destination());
 
-        assert_eq!("move".parse::<OperationKind>().unwrap(), OperationKind::Move);
-        assert_eq!("delete".parse::<OperationKind>().unwrap(), OperationKind::Delete);
+        assert_eq!(
+            "move".parse::<OperationKind>().unwrap(),
+            OperationKind::Move
+        );
+        assert_eq!(
+            "delete".parse::<OperationKind>().unwrap(),
+            OperationKind::Delete
+        );
         assert!("invalid_op".parse::<OperationKind>().is_err());
     }
 

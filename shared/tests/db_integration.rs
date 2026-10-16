@@ -5,16 +5,17 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
+    clippy::assert_is_empty,
     clippy::cast_possible_truncation
 )]
 
 use rusqlite::params;
 use shared::db::{
-    aggregate_event_counts, count_all_events, count_all_tags, count_documents,
-    count_events_in_window, current_version, delete_document, get_events_for_item, index_document,
-    list_all_tags, list_applied_migrations, prune_events_before, query_paths_by_tag,
-    query_tags_for_path, record_event, remove_stale_paths, remove_tag, remove_tags_for_path,
-    search, sync_path_tags, upsert_tag, Database, FtsDocument, FtsQueryBuilder, TagCacheEntry,
+    Database, FtsDocument, FtsQueryBuilder, TagCacheEntry, aggregate_event_counts,
+    count_all_events, count_all_tags, count_documents, count_events_in_window, current_version,
+    delete_document, get_events_for_item, index_document, list_all_tags, list_applied_migrations,
+    prune_events_before, query_paths_by_tag, query_tags_for_path, record_event, remove_stale_paths,
+    remove_tag, remove_tags_for_path, search, sync_path_tags, upsert_tag,
 };
 
 #[test]
@@ -149,11 +150,14 @@ fn test_integration_fts5_indexing_and_prefix_queries() {
 
     let upgraded_results = search(&db, "upgraded", 10).expect("search upgraded");
     assert_eq!(upgraded_results.len(), 1);
-    assert_eq!(upgraded_results[0].path, "/home/alice/Projects/findx/file_crawler.rs");
+    assert_eq!(
+        upgraded_results[0].path,
+        "/home/alice/Projects/findx/file_crawler.rs"
+    );
 
     // 5. Delete document
-    let deleted_count = delete_document(&db, "/home/alice/Projects/findx/file_crawler.rs")
-        .expect("delete");
+    let deleted_count =
+        delete_document(&db, "/home/alice/Projects/findx/file_crawler.rs").expect("delete");
     assert_eq!(deleted_count, 1);
     assert_eq!(count_documents(&db).expect("count after delete"), 2);
 
@@ -260,7 +264,10 @@ fn test_integration_frecency_engagement_records() {
 
     // 5. Pruning older events
     let pruned = prune_events_before(&db, ts_base + 200).expect("prune");
-    assert_eq!(pruned, 3, "events strictly before ts_base + 200 should be pruned");
+    assert_eq!(
+        pruned, 3,
+        "events strictly before ts_base + 200 should be pruned"
+    );
     assert_eq!(count_all_events(&db).expect("count after prune"), 3);
 }
 
@@ -300,10 +307,30 @@ fn test_integration_tag_cache_and_constraints() {
 
     // 3. Multi-tag indexing and queries
     let entries = [
-        TagCacheEntry::new("/docs/contract.pdf", "Confidential", Some("Orange".into()), 1_000_005),
-        TagCacheEntry::new("/docs/invoice.pdf", "Finance", Some("Green".into()), 1_000_010),
-        TagCacheEntry::new("/docs/invoice.pdf", "Confidential", Some("Orange".into()), 1_000_010),
-        TagCacheEntry::new("/photos/vacation.jpg", "Travel", Some("Blue".into()), 1_000_020),
+        TagCacheEntry::new(
+            "/docs/contract.pdf",
+            "Confidential",
+            Some("Orange".into()),
+            1_000_005,
+        ),
+        TagCacheEntry::new(
+            "/docs/invoice.pdf",
+            "Finance",
+            Some("Green".into()),
+            1_000_010,
+        ),
+        TagCacheEntry::new(
+            "/docs/invoice.pdf",
+            "Confidential",
+            Some("Orange".into()),
+            1_000_010,
+        ),
+        TagCacheEntry::new(
+            "/photos/vacation.jpg",
+            "Travel",
+            Some("Blue".into()),
+            1_000_020,
+        ),
     ];
     for entry in &entries {
         upsert_tag(&db, entry).expect("insert entry");
@@ -319,7 +346,8 @@ fn test_integration_tag_cache_and_constraints() {
     );
 
     // Query tags for path (ordered alphabetically by tag name)
-    let contract_tags = query_tags_for_path(&db, "/docs/contract.pdf").expect("query contract tags");
+    let contract_tags =
+        query_tags_for_path(&db, "/docs/contract.pdf").expect("query contract tags");
     assert_eq!(contract_tags.len(), 2);
     assert_eq!(contract_tags[0].tag_name, "Confidential");
     assert_eq!(contract_tags[1].tag_name, "Legal");
@@ -340,15 +368,25 @@ fn test_integration_tag_cache_and_constraints() {
     // 5. Remove single tag & remove all tags for path
     let removed = remove_tag(&db, "/docs/invoice.pdf", "Processed").expect("remove tag");
     assert!(removed);
-    assert_eq!(query_tags_for_path(&db, "/docs/invoice.pdf").expect("q").len(), 1);
+    assert_eq!(
+        query_tags_for_path(&db, "/docs/invoice.pdf")
+            .expect("q")
+            .len(),
+        1
+    );
 
     let removed_path = remove_tags_for_path(&db, "/docs/invoice.pdf").expect("remove path");
     assert_eq!(removed_path, 1);
-    assert!(query_tags_for_path(&db, "/docs/invoice.pdf").expect("q").is_empty());
+    assert!(
+        query_tags_for_path(&db, "/docs/invoice.pdf")
+            .expect("q")
+            .is_empty()
+    );
 
     // 6. Batch remove stale paths
-    let deleted_stale = remove_stale_paths(&mut db, &["/docs/contract.pdf", "/photos/vacation.jpg"])
-        .expect("batch remove stale");
+    let deleted_stale =
+        remove_stale_paths(&mut db, &["/docs/contract.pdf", "/photos/vacation.jpg"])
+            .expect("batch remove stale");
     assert_eq!(deleted_stale, 3);
     assert_eq!(count_all_tags(&db).expect("remaining tags"), 0);
 }

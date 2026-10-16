@@ -44,8 +44,7 @@ fn get_xattr_string(path: &Path, attr: &str) -> Result<Option<String>> {
 
     match xattr::get(path, attr) {
         Ok(Some(bytes)) => {
-            let s = String::from_utf8(bytes)
-                .map_err(|e| XattrError::invalid_encoding(attr, e))?;
+            let s = String::from_utf8(bytes).map_err(|e| XattrError::invalid_encoding(attr, e))?;
             Ok(Some(s))
         }
         Ok(None) => Ok(None),
@@ -317,7 +316,9 @@ mod tests {
 
         let err = set_comment(path, &huge_comment).unwrap_err();
         match err {
-            crate::errors::SharedError::Xattr(XattrError::ValueTooLarge { size, limit, .. }) => {
+            crate::errors::SharedError::Xattr(XattrError::ValueTooLarge {
+                size, limit, ..
+            }) => {
                 assert_eq!(size, MAX_XATTR_SIZE + 10);
                 assert_eq!(limit, MAX_XATTR_SIZE);
             }

@@ -287,7 +287,10 @@ impl AggregatedSearchResults {
         let mut top_hit = None;
         let mut remaining = records;
 
-        if remaining.first().is_some_and(|f| f.score >= top_hit_threshold) {
+        if remaining
+            .first()
+            .is_some_and(|f| f.score >= top_hit_threshold)
+        {
             let mut hit = remaining.remove(0);
             hit.category = SearchCategory::TopHit;
             top_hit = Some(hit);
@@ -326,10 +329,19 @@ mod tests {
         assert_eq!(SearchCategory::TopHit.display_name(), "Top Hit");
         assert_eq!(SearchCategory::Applications.priority(), 1);
         assert_eq!(SearchCategory::TopHit.priority(), 0);
-        assert_eq!(SearchCategory::WebSearch.default_icon(), "applications-internet");
+        assert_eq!(
+            SearchCategory::WebSearch.default_icon(),
+            "applications-internet"
+        );
 
-        assert_eq!("apps".parse::<SearchCategory>().unwrap(), SearchCategory::Applications);
-        assert_eq!("calc".parse::<SearchCategory>().unwrap(), SearchCategory::Calculations);
+        assert_eq!(
+            "apps".parse::<SearchCategory>().unwrap(),
+            SearchCategory::Applications
+        );
+        assert_eq!(
+            "calc".parse::<SearchCategory>().unwrap(),
+            SearchCategory::Calculations
+        );
         assert!("invalid_category".parse::<SearchCategory>().is_err());
     }
 
@@ -339,7 +351,10 @@ mod tests {
             desktop_id: "org.gnome.Calculator.desktop".to_string(),
             exec: "gnome-calculator".to_string(),
         };
-        assert_eq!(app_payload.desktop_id(), Some("org.gnome.Calculator.desktop"));
+        assert_eq!(
+            app_payload.desktop_id(),
+            Some("org.gnome.Calculator.desktop")
+        );
         assert_eq!(app_payload.app_exec(), Some("gnome-calculator"));
         assert_eq!(app_payload.file_path(), None);
 
@@ -399,7 +414,10 @@ mod tests {
         assert_eq!(top.category, SearchCategory::TopHit);
 
         assert_eq!(aggregated.sections.len(), 2);
-        assert_eq!(aggregated.sections[0].category, SearchCategory::Calculations);
+        assert_eq!(
+            aggregated.sections[0].category,
+            SearchCategory::Calculations
+        );
         assert_eq!(aggregated.sections[1].category, SearchCategory::Documents);
     }
 

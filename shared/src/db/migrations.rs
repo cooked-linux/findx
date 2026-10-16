@@ -1,6 +1,6 @@
 //! Schema migration engine for versioned SQLite upgrades.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::errors::DbError;
 
@@ -56,7 +56,10 @@ pub fn apply_migrations(conn: &mut Connection) -> Result<usize, DbError> {
         tx.execute_batch(migration.sql).map_err(|e| {
             DbError::migration_failed(
                 migration.version,
-                format!("failed executing migration '{}': {e}", migration.description),
+                format!(
+                    "failed executing migration '{}': {e}",
+                    migration.description
+                ),
             )
         })?;
 
@@ -91,11 +94,9 @@ pub fn current_version(conn: &Connection) -> Result<Option<u32>, DbError> {
     }
 
     let version: Option<u32> = conn
-        .query_row(
-            "SELECT MAX(version) FROM schema_migrations;",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM schema_migrations;", [], |row| {
+            row.get(0)
+        })
         .map_err(DbError::from)?;
 
     Ok(version)
@@ -119,7 +120,8 @@ pub fn list_applied_migrations(conn: &Connection) -> Result<Vec<(u32, String)>, 
         return Ok(Vec::new());
     }
 
-    let mut stmt = conn.prepare("SELECT version, applied_at FROM schema_migrations ORDER BY version ASC;")?;
+    let mut stmt =
+        conn.prepare("SELECT version, applied_at FROM schema_migrations ORDER BY version ASC;")?;
     let rows = stmt.query_map([], |row| {
         Ok((row.get::<_, u32>(0)?, row.get::<_, String>(1)?))
     })?;
@@ -132,6 +134,12 @@ pub fn list_applied_migrations(conn: &Connection) -> Result<Vec<(u32, String)>, 
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
 
@@ -167,7 +175,9 @@ mod tests {
 
         // Verify frecency_events exists
         let frecency_count: i64 = conn
-            .query_row("SELECT COUNT(1) FROM frecency_events;", [], |row| row.get(0))
+            .query_row("SELECT COUNT(1) FROM frecency_events;", [], |row| {
+                row.get(0)
+            })
             .expect("frecency_events table query");
         assert_eq!(frecency_count, 0);
 
@@ -219,7 +229,9 @@ mod tests {
             .unwrap_err();
 
         let db_err = DbError::migration_failed(999, err.to_string());
-        assert!(matches!(db_err, DbError::MigrationFailed { version: 999, .. }));
+        assert!(matches!(
+            db_err,
+            DbError::MigrationFailed { version: 999, .. }
+        ));
     }
 }
-

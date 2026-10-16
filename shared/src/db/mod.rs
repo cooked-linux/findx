@@ -6,19 +6,20 @@ pub mod fts;
 pub mod migrations;
 pub mod tags;
 
-pub use connection::{configure_connection, default_db_path, Database, PRAGMAS};
+pub use connection::{Database, PRAGMAS, configure_connection, default_db_path};
 pub use frecency::{
-    aggregate_event_counts, count_all_events, count_events_in_window, get_events_for_item,
-    prune_events_before, record_event, record_event_now, FrecencyAggregate, FrecencyEvent,
+    FrecencyAggregate, FrecencyEvent, aggregate_event_counts, count_all_events,
+    count_events_in_window, get_events_for_item, prune_events_before, record_event,
+    record_event_now,
 };
 pub use fts::{
-    count_documents, delete_document, index_document, sanitize_query, search, FtsDocument,
-    FtsQueryBuilder, FtsSearchResult,
+    FtsDocument, FtsQueryBuilder, FtsSearchResult, count_documents, delete_document,
+    index_document, sanitize_query, search,
 };
 pub use migrations::{
-    apply_migrations, current_version, list_applied_migrations, Migration, MIGRATIONS,
+    MIGRATIONS, Migration, apply_migrations, current_version, list_applied_migrations,
 };
 pub use tags::{
-    count_all_tags, list_all_tags, query_paths_by_tag, query_tags_for_path, remove_stale_paths,
-    remove_tag, remove_tags_for_path, sync_path_tags, upsert_tag, TagCacheEntry,
+    TagCacheEntry, count_all_tags, list_all_tags, query_paths_by_tag, query_tags_for_path,
+    remove_stale_paths, remove_tag, remove_tags_for_path, sync_path_tags, upsert_tag,
 };

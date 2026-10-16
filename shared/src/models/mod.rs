@@ -173,27 +173,84 @@ mod tests {
 
     #[test]
     fn test_mime_category_heuristics() {
-        assert_eq!(MimeCategory::from_mime_str("inode/directory"), MimeCategory::Folder);
-        assert_eq!(MimeCategory::from_mime_str("application/pdf"), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_mime_str("text/markdown"), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_mime_str("text/x-rust"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("text/rust"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("application/json"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("image/svg+xml"), MimeCategory::Image);
-        assert_eq!(MimeCategory::from_mime_str("audio/flac"), MimeCategory::Audio);
-        assert_eq!(MimeCategory::from_mime_str("video/webm"), MimeCategory::Video);
-        assert_eq!(MimeCategory::from_mime_str("application/zip"), MimeCategory::Archive);
-        assert_eq!(MimeCategory::from_mime_str("application/x-executable"), MimeCategory::Executable);
-        assert_eq!(MimeCategory::from_mime_str("font/woff2"), MimeCategory::Font);
-        assert_eq!(MimeCategory::from_mime_str("unknown/binary"), MimeCategory::Unknown);
+        assert_eq!(
+            MimeCategory::from_mime_str("inode/directory"),
+            MimeCategory::Folder
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/pdf"),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("text/markdown"),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("text/x-rust"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("text/rust"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/json"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("image/svg+xml"),
+            MimeCategory::Image
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("audio/flac"),
+            MimeCategory::Audio
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("video/webm"),
+            MimeCategory::Video
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/zip"),
+            MimeCategory::Archive
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/x-executable"),
+            MimeCategory::Executable
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("font/woff2"),
+            MimeCategory::Font
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("unknown/binary"),
+            MimeCategory::Unknown
+        );
 
         // Path-based tests
-        assert_eq!(MimeCategory::from_path(Path::new("Cargo.toml")), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_path(Path::new("build.rs")), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_path(Path::new("document.odt")), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_path(Path::new("archive.tar.gz")), MimeCategory::Archive);
-        assert_eq!(MimeCategory::from_path(Path::new("app.AppImage")), MimeCategory::Executable);
-        assert_eq!(MimeCategory::from_path(Path::new("sample.wav")), MimeCategory::Audio);
+        assert_eq!(
+            MimeCategory::from_path(Path::new("Cargo.toml")),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("build.rs")),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("document.odt")),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("archive.tar.gz")),
+            MimeCategory::Archive
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("app.AppImage")),
+            MimeCategory::Executable
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("sample.wav")),
+            MimeCategory::Audio
+        );
     }
 
     #[test]

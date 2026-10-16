@@ -245,10 +245,7 @@ DeletionDate=2026-10-15T21:30:00
             info.original_path,
             PathBuf::from("/home/user/documents/report.pdf")
         );
-        assert_eq!(
-            info.deletion_date.as_deref(),
-            Some("2026-10-15T21:30:00")
-        );
+        assert_eq!(info.deletion_date.as_deref(), Some("2026-10-15T21:30:00"));
     }
 
     #[test]
@@ -263,10 +260,7 @@ DeletionDate=2026-10-15T10:15:30Z
             info.original_path,
             PathBuf::from("/home/user/My Folder/File#1 (Draft).txt")
         );
-        assert_eq!(
-            info.deletion_date.as_deref(),
-            Some("2026-10-15T10:15:30Z")
-        );
+        assert_eq!(info.deletion_date.as_deref(), Some("2026-10-15T10:15:30Z"));
     }
 
     #[test]
@@ -299,7 +293,10 @@ DeletionDate=2026-10-15T10:15:30Z
 
         let items = list_trash_items().unwrap();
         let found = items.iter().find(|i| i.original_path == path);
-        assert!(found.is_some(), "trashed item should appear in trash items list");
+        assert!(
+            found.is_some(),
+            "trashed item should appear in trash items list"
+        );
 
         if let Some(item) = found {
             restore_from_trash(item).unwrap();

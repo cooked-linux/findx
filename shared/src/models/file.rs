@@ -80,7 +80,9 @@ impl FileItem {
     /// Checks if a tag with the specified name exists on this item.
     #[must_use]
     pub fn has_tag(&self, tag_name: &str) -> bool {
-        self.tags.iter().any(|t| t.name.eq_ignore_ascii_case(tag_name))
+        self.tags
+            .iter()
+            .any(|t| t.name.eq_ignore_ascii_case(tag_name))
     }
 
     /// Returns all color labels associated with this item's tags.
@@ -118,7 +120,10 @@ pub struct FileMetadata {
 impl FileMetadata {
     /// Constructs a new [`FileMetadata`] struct.
     #[must_use]
-    #[expect(clippy::too_many_arguments, reason = "comprehensive metadata initialization")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "comprehensive metadata initialization"
+    )]
     pub fn new(
         size_bytes: u64,
         modified: Option<SystemTime>,

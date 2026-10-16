@@ -15,10 +15,10 @@ use std::io::Write;
 use tempfile::tempdir;
 
 use shared::fs::{
-    clone_file, clone_file_with_progress, get_comment, get_origin_url, get_tags,
+    FileTag, TagColor, clone_file, clone_file_with_progress, get_comment, get_origin_url, get_tags,
     is_same_filesystem, list_trash_items, lstat_path, move_to_trash, natural_cmp, parse_trash_info,
     remove_comment, remove_origin_url, remove_tags, restore_from_trash, set_comment,
-    set_origin_url, set_tags, stat_path, FileTag, TagColor,
+    set_origin_url, set_tags, stat_path,
 };
 
 #[test]
@@ -62,7 +62,9 @@ fn test_integration_xattr_lifecycle() {
     let url = "https://reports.company.com/2026/q3_summary.pdf";
     set_origin_url(&file_path, url).expect("set_origin_url");
     assert_eq!(
-        get_origin_url(&file_path).expect("get_origin_url").as_deref(),
+        get_origin_url(&file_path)
+            .expect("get_origin_url")
+            .as_deref(),
         Some(url)
     );
 
@@ -148,7 +150,9 @@ fn test_integration_clone_hash_identity() {
 
     // Verify metadata / comment preserved
     assert_eq!(
-        get_comment(&dst_path).expect("get cloned comment").as_deref(),
+        get_comment(&dst_path)
+            .expect("get cloned comment")
+            .as_deref(),
         Some("Cloned file metadata")
     );
 
@@ -156,7 +160,10 @@ fn test_integration_clone_hash_identity() {
     let dst_path2 = dir.path().join("cloned_data_direct.bin");
     let direct_copied = clone_file(&src_path, &dst_path2).expect("direct clone");
     assert_eq!(direct_copied, payload.len() as u64);
-    assert_eq!(std::fs::read(&dst_path2).expect("read direct clone"), payload);
+    assert_eq!(
+        std::fs::read(&dst_path2).expect("read direct clone"),
+        payload
+    );
 }
 
 #[test]
@@ -170,7 +177,10 @@ fn test_integration_trash_and_trashinfo_parsing() {
 
     // Move to Freedesktop trash
     move_to_trash(&file_path).expect("move_to_trash");
-    assert!(!file_path.exists(), "file must no longer exist at original path");
+    assert!(
+        !file_path.exists(),
+        "file must no longer exist at original path"
+    );
 
     // Find in trash listing
     let trash_items = list_trash_items().expect("list_trash_items");
@@ -193,10 +203,7 @@ fn test_integration_trash_and_trashinfo_parsing() {
     // Restore from trash
     restore_from_trash(trashed_item).expect("restore_from_trash");
     assert!(file_path.exists(), "file must be restored to original path");
-    assert_eq!(
-        std::fs::read(&file_path).expect("read restored"),
-        content
-    );
+    assert_eq!(std::fs::read(&file_path).expect("read restored"), content);
 }
 
 #[test]

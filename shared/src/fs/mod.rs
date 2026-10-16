@@ -10,16 +10,16 @@ pub mod stat;
 pub mod trash;
 pub mod xattr;
 
+pub use crate::models::{FileTag, TagColor};
 pub use clone::{clone_file, clone_file_with_progress};
 pub use natord::natural_cmp;
-pub use stat::{is_same_filesystem, lstat_path, stat_path, EnhancedStat, InodeKey};
-pub use crate::models::{FileTag, TagColor};
+pub use stat::{EnhancedStat, InodeKey, is_same_filesystem, lstat_path, stat_path};
 pub use trash::{
-    empty_trash, list_trash_items, move_to_trash, parse_trash_info, restore_from_trash, TrashInfo,
-    TrashedItem,
+    TrashInfo, TrashedItem, empty_trash, list_trash_items, move_to_trash, parse_trash_info,
+    restore_from_trash,
 };
 pub use xattr::{
-    get_comment, get_origin_url, get_tags, remove_comment, remove_origin_url, remove_tags,
-    set_comment, set_origin_url, set_tags, XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL,
-    XATTR_TAGS,
+    XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL, XATTR_TAGS, get_comment, get_origin_url,
+    get_tags, remove_comment, remove_origin_url, remove_tags, set_comment, set_origin_url,
+    set_tags,
 };

@@ -292,31 +292,91 @@ mod tests {
 
     #[test]
     fn test_from_mime_str_mappings() {
-        assert_eq!(MimeCategory::from_mime_str("text/rust"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("text/x-rust"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("application/javascript"), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_mime_str("application/pdf"), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_mime_str("text/plain"), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_mime_str("image/png"), MimeCategory::Image);
-        assert_eq!(MimeCategory::from_mime_str("audio/mpeg"), MimeCategory::Audio);
-        assert_eq!(MimeCategory::from_mime_str("video/mp4"), MimeCategory::Video);
-        assert_eq!(MimeCategory::from_mime_str("application/zip"), MimeCategory::Archive);
-        assert_eq!(MimeCategory::from_mime_str("application/x-executable"), MimeCategory::Executable);
+        assert_eq!(
+            MimeCategory::from_mime_str("text/rust"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("text/x-rust"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/javascript"),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/pdf"),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("text/plain"),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("image/png"),
+            MimeCategory::Image
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("audio/mpeg"),
+            MimeCategory::Audio
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("video/mp4"),
+            MimeCategory::Video
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/zip"),
+            MimeCategory::Archive
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/x-executable"),
+            MimeCategory::Executable
+        );
         assert_eq!(MimeCategory::from_mime_str("font/ttf"), MimeCategory::Font);
-        assert_eq!(MimeCategory::from_mime_str("inode/directory"), MimeCategory::Folder);
-        assert_eq!(MimeCategory::from_mime_str("application/octet-stream"), MimeCategory::Unknown);
+        assert_eq!(
+            MimeCategory::from_mime_str("inode/directory"),
+            MimeCategory::Folder
+        );
+        assert_eq!(
+            MimeCategory::from_mime_str("application/octet-stream"),
+            MimeCategory::Unknown
+        );
     }
 
     #[test]
     fn test_from_path() {
-        assert_eq!(MimeCategory::from_path(Path::new("main.rs")), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_path(Path::new("/tmp/test.py")), MimeCategory::SourceCode);
-        assert_eq!(MimeCategory::from_path(Path::new("report.pdf")), MimeCategory::Document);
-        assert_eq!(MimeCategory::from_path(Path::new("photo.jpg")), MimeCategory::Image);
-        assert_eq!(MimeCategory::from_path(Path::new("song.mp3")), MimeCategory::Audio);
-        assert_eq!(MimeCategory::from_path(Path::new("clip.mp4")), MimeCategory::Video);
-        assert_eq!(MimeCategory::from_path(Path::new("backup.tar.gz")), MimeCategory::Archive);
-        assert_eq!(MimeCategory::from_path(Path::new("font.woff2")), MimeCategory::Font);
+        assert_eq!(
+            MimeCategory::from_path(Path::new("main.rs")),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("/tmp/test.py")),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("report.pdf")),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("photo.jpg")),
+            MimeCategory::Image
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("song.mp3")),
+            MimeCategory::Audio
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("clip.mp4")),
+            MimeCategory::Video
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("backup.tar.gz")),
+            MimeCategory::Archive
+        );
+        assert_eq!(
+            MimeCategory::from_path(Path::new("font.woff2")),
+            MimeCategory::Font
+        );
     }
 
     #[test]
@@ -328,9 +388,18 @@ mod tests {
 
     #[test]
     fn test_mime_category_from_str() {
-        assert_eq!("Document".parse::<MimeCategory>().unwrap(), MimeCategory::Document);
-        assert_eq!("source code".parse::<MimeCategory>().unwrap(), MimeCategory::SourceCode);
-        assert_eq!("text/rust".parse::<MimeCategory>().unwrap(), MimeCategory::SourceCode);
+        assert_eq!(
+            "Document".parse::<MimeCategory>().unwrap(),
+            MimeCategory::Document
+        );
+        assert_eq!(
+            "source code".parse::<MimeCategory>().unwrap(),
+            MimeCategory::SourceCode
+        );
+        assert_eq!(
+            "text/rust".parse::<MimeCategory>().unwrap(),
+            MimeCategory::SourceCode
+        );
         assert!("totally-invalid/xyz".parse::<MimeCategory>().is_err());
     }
 

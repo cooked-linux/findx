@@ -111,11 +111,7 @@ fn timestamp_to_system_time(ts: &libc::statx_timestamp) -> Option<SystemTime> {
 /// # Safety
 /// Safely initializes zeroed buffer and delegates to libc.
 #[allow(unsafe_code)]
-fn raw_statx(
-    path: &Path,
-    flags: libc::c_int,
-    mask: libc::c_uint,
-) -> std::io::Result<libc::statx> {
+fn raw_statx(path: &Path, flags: libc::c_int, mask: libc::c_uint) -> std::io::Result<libc::statx> {
     let c_path = CString::new(path.as_os_str().as_bytes())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
@@ -245,10 +241,8 @@ fn fallback_metadata_query(path: &Path, follow_symlinks: bool) -> Result<Enhance
     let atime = meta.accessed().ok();
     let mtime = meta.modified().ok();
     let ctime_nsec = u32::try_from(meta.ctime_nsec()).unwrap_or(0);
-    let ctime = Some(
-        SystemTime::UNIX_EPOCH
-            + Duration::new(meta.ctime().unsigned_abs(), ctime_nsec),
-    );
+    let ctime =
+        Some(SystemTime::UNIX_EPOCH + Duration::new(meta.ctime().unsigned_abs(), ctime_nsec));
     let btime = meta.created().ok();
 
     Ok(EnhancedStat {
