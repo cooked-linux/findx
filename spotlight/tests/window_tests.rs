@@ -183,6 +183,10 @@ fn test_navigation_key_mappings() {
         map_key_to_action(gdk4::Key::Escape, gdk4::ModifierType::empty()),
         Some(KeyAction::Escape)
     );
+    assert_eq!(
+        map_key_to_action(gdk4::Key::space, gdk4::ModifierType::SUPER_MASK),
+        Some(KeyAction::Toggle)
+    );
 }
 
 #[test]

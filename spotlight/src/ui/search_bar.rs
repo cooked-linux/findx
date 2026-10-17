@@ -14,13 +14,18 @@ pub enum KeyAction {
     Enter,
     Tab,
     Escape,
+    Toggle,
 }
 
 /// Maps GDK keys and modifier states to high-level navigation `KeyAction`.
 #[must_use]
 pub const fn map_key_to_action(key: gdk4::Key, modifiers: gdk4::ModifierType) -> Option<KeyAction> {
     let ctrl = modifiers.contains(gdk4::ModifierType::CONTROL_MASK);
+    let super_mod = modifiers.contains(gdk4::ModifierType::SUPER_MASK)
+        || modifiers.contains(gdk4::ModifierType::META_MASK);
+
     match key {
+        gdk4::Key::space if super_mod => Some(KeyAction::Toggle),
         gdk4::Key::Up => Some(KeyAction::Up),
         gdk4::Key::Down => Some(KeyAction::Down),
         gdk4::Key::k | gdk4::Key::K if ctrl => Some(KeyAction::Up),

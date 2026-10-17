@@ -269,21 +269,28 @@ impl SpotlightWindow {
         });
         window.add_controller(click_gesture);
 
-        // Escape key handling: clear if non-empty, dismiss if empty
-        let search_bar_esc = search_bar_widget.clone();
-        let state_clone = Rc::clone(&state);
+        // Key actions: Escape to clear/dismiss, Toggle (Super+Space) to dismiss immediately
+        let search_bar_keys = search_bar_widget.clone();
+        let state_keys = Rc::clone(&state);
         let window_weak = window.downgrade();
-        search_bar_widget.connect_key_action(move |action| {
-            if action == KeyAction::Escape {
-                if search_bar_esc.text().trim().is_empty() {
+        search_bar_widget.connect_key_action(move |action| match action {
+            KeyAction::Escape => {
+                if search_bar_keys.text().trim().is_empty() {
                     if let Some(win) = window_weak.upgrade() {
-                        state_clone.set(OverlayState::Dormant);
+                        state_keys.set(OverlayState::Dormant);
                         win.set_visible(false);
                     }
                 } else {
-                    search_bar_esc.clear();
+                    search_bar_keys.clear();
                 }
             }
+            KeyAction::Toggle => {
+                if let Some(win) = window_weak.upgrade() {
+                    state_keys.set(OverlayState::Dormant);
+                    win.set_visible(false);
+                }
+            }
+            _ => {}
         });
 
         Self {
