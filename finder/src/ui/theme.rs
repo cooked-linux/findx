@@ -133,6 +133,130 @@ pub const FINDER_CSS: &str = r"
     color: var(--mu);
     font-size: 12px;
 }
+
+/* Sidebar Container (210px default width) */
+.finder-sidebar {
+    min-width: 160px;
+    background-color: var(--sb);
+    border-right: 1px solid var(--ln);
+}
+
+.sd {
+    width: 210px;
+    background-color: var(--sb);
+    border-right: 1px solid var(--ln);
+}
+
+/* Sidebar Sections & Headers */
+.sh-box {
+    padding: 10px 8px 4px 8px;
+}
+.sh-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--mu);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+.sh-toggle {
+    font-size: 11px;
+    color: var(--mu);
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    background-color: transparent;
+}
+.sh-box:hover .sh-toggle {
+    opacity: 1;
+}
+.sh-toggle:hover {
+    color: var(--tx);
+    background-color: var(--hv);
+}
+
+/* Sidebar Item Rows */
+.si {
+    padding: 5px 8px;
+    border-radius: 7px;
+    color: var(--tx);
+    font-size: 13px;
+    margin: 1px 4px;
+    transition: background-color 100ms ease;
+}
+.si:hover {
+    background-color: var(--hv);
+}
+.si.on {
+    background-color: var(--ac);
+    color: #ffffff;
+}
+.si.on label {
+    color: #ffffff;
+}
+
+/* Item Glyphs / Icons */
+.gl {
+    min-width: 13px;
+    min-height: 13px;
+    width: 13px;
+    height: 13px;
+    opacity: 0.75;
+}
+.si.on .gl {
+    color: #ffffff;
+}
+
+/* Inline Eject Button */
+.si-eject-btn {
+    padding: 0 4px;
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 4px;
+    color: var(--mu);
+    font-size: 12px;
+    background-color: transparent;
+}
+.si-eject-btn:hover {
+    background-color: var(--hv);
+    color: var(--tx);
+}
+.si.on .si-eject-btn {
+    color: #ffffff;
+}
+
+/* macOS Tag Color Dots */
+.tg {
+    min-width: 9px;
+    min-height: 9px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    transition: transform 100ms ease;
+}
+.tg:hover {
+    transform: scale(1.25);
+}
+.tg.red { background-color: #ff5f57; }
+.tg.orange { background-color: #ff9f0a; }
+.tg.yellow { background-color: #ffd60a; }
+.tg.green { background-color: #30d158; }
+.tg.blue { background-color: #0a84ff; }
+.tg.purple { background-color: #bf5af2; }
+.tg.gray { background-color: #98989d; }
+.tg.default { background-color: #98989d; }
+.tags-dots-row {
+    padding: 4px 10px 8px 10px;
+    gap: 7px;
+}
+
+/* Drag and Drop Hover Indicators */
+.si.drop-target {
+    border-top: 2px solid var(--ac);
+}
 ";
 
 /// Installs the Finder CSS stylesheet onto the default display.
