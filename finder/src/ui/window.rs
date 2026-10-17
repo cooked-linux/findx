@@ -10,9 +10,11 @@ use libadwaita::prelude::*;
 use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
 use super::list::HierarchicalListViewWidget;
+use super::path_bar::PathBarWidget;
 use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
 use super::view_mode::ViewMode;
+use crate::breadcrumbs::FinderPreferences;
 use crate::history::NavigationHistory;
 use crate::sidebar::config::SidebarConfig;
 use crate::sidebar::tags::TagFilterEvent;
@@ -30,6 +32,8 @@ pub enum WindowKeyAction {
     FocusSearch,
     /// Toggle left sidebar navigation panel visibility (`Ctrl+Alt+S` or `Cmd+Alt+S`).
     ToggleSidebar,
+    /// Toggle bottom breadcrumbs path bar visibility (`Ctrl+Alt+P` or `Cmd+Alt+P`).
+    TogglePathBar,
 }
 
 /// Maps keyboard shortcut combinations to corresponding [`WindowKeyAction`] variants.
@@ -68,8 +72,13 @@ pub fn map_key_to_window_action(
     let super_key = state.contains(gdk4::ModifierType::SUPER_MASK)
         || state.contains(gdk4::ModifierType::META_MASK);
 
-    if (ctrl || super_key) && alt && (keyval == gdk4::Key::s || keyval == gdk4::Key::S) {
-        return Some(WindowKeyAction::ToggleSidebar);
+    if (ctrl || super_key) && alt {
+        if keyval == gdk4::Key::s || keyval == gdk4::Key::S {
+            return Some(WindowKeyAction::ToggleSidebar);
+        }
+        if keyval == gdk4::Key::p || keyval == gdk4::Key::P {
+            return Some(WindowKeyAction::TogglePathBar);
+        }
     }
 
     None
@@ -96,6 +105,8 @@ pub struct FinderWindow {
     pub column_container: ColumnContainer,
     /// Hierarchical tabular list view widget.
     pub list_view: HierarchicalListViewWidget,
+    /// Bottom breadcrumbs path bar widget (28px height).
+    pub path_bar: PathBarWidget,
     /// Bottom breadcrumbs dock container (28px height).
     pub breadcrumbs_box: gtk4::Box,
     /// Label displaying active path breadcrumbs.
@@ -114,6 +125,7 @@ struct LayoutCompartments {
     stack: gtk4::Stack,
     column_container: ColumnContainer,
     list_view: HierarchicalListViewWidget,
+    path_bar: PathBarWidget,
     breadcrumbs_box: gtk4::Box,
     breadcrumbs_label: gtk4::Label,
 }
@@ -161,6 +173,7 @@ impl FinderWindow {
             stack: layout.stack,
             column_container: layout.column_container,
             list_view: layout.list_view,
+            path_bar: layout.path_bar,
             breadcrumbs_box: layout.breadcrumbs_box,
             breadcrumbs_label: layout.breadcrumbs_label,
             history,
@@ -244,8 +257,18 @@ impl FinderWindow {
         let (stack, column_container, list_view) = Self::build_view_stack(initial_path);
         main_view_box.append(&stack);
 
-        let (breadcrumbs_box, breadcrumbs_label) = Self::build_breadcrumbs_dock(initial_path);
-        main_view_box.append(&breadcrumbs_box);
+        let path_bar = PathBarWidget::new();
+        let prefs = FinderPreferences::load();
+        path_bar.container.set_visible(prefs.pathbar_visible);
+        path_bar.set_path(initial_path, None);
+        main_view_box.append(&path_bar.container);
+
+        let breadcrumbs_box = path_bar.container.clone();
+        let breadcrumbs_label = gtk4::Label::builder()
+            .label(initial_path.to_string_lossy().as_ref())
+            .halign(gtk4::Align::Start)
+            .css_classes(["breadcrumbs-label"])
+            .build();
 
         paned.set_end_child(Some(&main_view_box));
         LayoutCompartments {
@@ -256,6 +279,7 @@ impl FinderWindow {
             stack,
             column_container,
             list_view,
+            path_bar,
             breadcrumbs_box,
             breadcrumbs_label,
         }
@@ -296,23 +320,6 @@ impl FinderWindow {
         page
     }
 
-    fn build_breadcrumbs_dock(initial_path: &Path) -> (gtk4::Box, gtk4::Label) {
-        let breadcrumbs_box = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .spacing(6)
-            .valign(gtk4::Align::Center)
-            .css_classes(["finder-breadcrumbs"])
-            .build();
-
-        let breadcrumbs_label = gtk4::Label::builder()
-            .label(initial_path.to_string_lossy().as_ref())
-            .halign(gtk4::Align::Start)
-            .css_classes(["breadcrumbs-label"])
-            .build();
-        breadcrumbs_box.append(&breadcrumbs_label);
-        (breadcrumbs_box, breadcrumbs_label)
-    }
-
     /// Presents the Finder window.
     pub fn present(&self) {
         self.window.present();
@@ -330,6 +337,9 @@ impl FinderWindow {
             WindowKeyAction::ToggleSidebar => {
                 self.toggle_sidebar();
             }
+            WindowKeyAction::TogglePathBar => {
+                self.toggle_path_bar();
+            }
         }
     }
 
@@ -344,6 +354,17 @@ impl FinderWindow {
         let _ = cfg.save();
     }
 
+    /// Toggles the bottom path bar visibility and persists the preference.
+    pub fn toggle_path_bar(&self) {
+        let is_visible = self.path_bar.container.is_visible();
+        let new_visible = !is_visible;
+        self.path_bar.container.set_visible(new_visible);
+
+        let mut prefs = FinderPreferences::load();
+        prefs.pathbar_visible = new_visible;
+        let _ = prefs.save();
+    }
+
     /// Handles filtering by tag emitted from the sidebar.
     pub fn handle_tag_filter(&self, event: TagFilterEvent) {
         match event {
@@ -352,6 +373,7 @@ impl FinderWindow {
                     .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
                 self.breadcrumbs_label
                     .set_text(&format!("Tags › {tag_name}"));
+                self.path_bar.set_tag_filter(&tag_name);
             }
             TagFilterEvent::Cleared => {
                 let curr = self.history.borrow().current_path().to_path_buf();
@@ -402,6 +424,7 @@ impl FinderWindow {
         self.header_bar.set_title(title, Some("folder-symbolic"));
         self.breadcrumbs_label
             .set_text(path.to_string_lossy().as_ref());
+        self.path_bar.set_path(path, None);
 
         let (can_back, can_forward) = {
             let hist = self.history.borrow();
@@ -447,6 +470,16 @@ impl FinderWindow {
         let win = self.clone();
         self.list_view.connect_path_changed(move |path| {
             win.sync_path_ui(path);
+        });
+
+        let win = self.clone();
+        self.path_bar.connect_navigate(move |path| {
+            win.navigate_to(path);
+        });
+
+        self.path_bar.connect_open_new_window(|path| {
+            let new_win = Self::with_initial_path(None, path);
+            new_win.present();
         });
     }
 
@@ -522,6 +555,22 @@ mod tests {
                 gdk4::ModifierType::SUPER_MASK | gdk4::ModifierType::ALT_MASK
             ),
             Some(WindowKeyAction::ToggleSidebar)
+        );
+
+        // Toggle Path Bar (Ctrl+Alt+P, Cmd+Alt+P)
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::p,
+                gdk4::ModifierType::CONTROL_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::TogglePathBar)
+        );
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::P,
+                gdk4::ModifierType::SUPER_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::TogglePathBar)
         );
 
         // Unhandled key
