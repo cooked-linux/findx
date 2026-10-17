@@ -7,6 +7,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
+use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
 use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
@@ -90,6 +91,8 @@ pub struct FinderWindow {
     pub main_view_box: gtk4::Box,
     /// View page switcher stack (Icons, List, Columns).
     pub stack: gtk4::Stack,
+    /// Cascading Miller columns container.
+    pub column_container: ColumnContainer,
     /// Bottom breadcrumbs dock container (28px height).
     pub breadcrumbs_box: gtk4::Box,
     /// Label displaying active path breadcrumbs.
@@ -106,6 +109,7 @@ struct LayoutCompartments {
     sidebar_box: gtk4::Box,
     main_view_box: gtk4::Box,
     stack: gtk4::Stack,
+    column_container: ColumnContainer,
     breadcrumbs_box: gtk4::Box,
     breadcrumbs_label: gtk4::Label,
 }
@@ -151,6 +155,7 @@ impl FinderWindow {
             sidebar_box: layout.sidebar_box,
             main_view_box: layout.main_view_box,
             stack: layout.stack,
+            column_container: layout.column_container,
             breadcrumbs_box: layout.breadcrumbs_box,
             breadcrumbs_label: layout.breadcrumbs_label,
             history,
@@ -231,7 +236,7 @@ impl FinderWindow {
             .vexpand(true)
             .build();
 
-        let stack = Self::build_view_stack();
+        let (stack, column_container) = Self::build_view_stack(initial_path);
         main_view_box.append(&stack);
 
         let (breadcrumbs_box, breadcrumbs_label) = Self::build_breadcrumbs_dock(initial_path);
@@ -244,12 +249,13 @@ impl FinderWindow {
             sidebar_box,
             main_view_box,
             stack,
+            column_container,
             breadcrumbs_box,
             breadcrumbs_label,
         }
     }
 
-    fn build_view_stack() -> gtk4::Stack {
+    fn build_view_stack(initial_path: &Path) -> (gtk4::Stack, ColumnContainer) {
         let stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::Crossfade)
             .hexpand(true)
@@ -258,13 +264,16 @@ impl FinderWindow {
 
         let icons_page = Self::build_placeholder_page("Icons View (Placeholder)");
         let list_page = Self::build_placeholder_page("List View (Placeholder)");
-        let columns_page = Self::build_placeholder_page("Columns View (Placeholder)");
+        let column_container = ColumnContainer::new(initial_path);
 
         stack.add_named(&icons_page, Some(ViewMode::Icons.as_str()));
         stack.add_named(&list_page, Some(ViewMode::List.as_str()));
-        stack.add_named(&columns_page, Some(ViewMode::Columns.as_str()));
+        stack.add_named(
+            &column_container.scrolled_window,
+            Some(ViewMode::Columns.as_str()),
+        );
         stack.set_visible_child_name(ViewMode::Columns.as_str());
-        stack
+        (stack, column_container)
     }
 
     fn build_placeholder_page(text: &'static str) -> gtk4::Box {
@@ -347,6 +356,7 @@ impl FinderWindow {
     pub fn navigate_to(&self, target: impl AsRef<Path>) {
         let target_buf = target.as_ref().to_path_buf();
         self.history.borrow_mut().navigate_to(&target_buf);
+        self.column_container.navigate_root(&target_buf);
         self.sync_path_ui(&target_buf);
     }
 
@@ -354,6 +364,7 @@ impl FinderWindow {
     pub fn go_back(&self) {
         let prev = self.history.borrow_mut().go_back();
         if let Some(target) = prev {
+            self.column_container.navigate_root(&target);
             self.sync_path_ui(&target);
         }
     }
@@ -362,6 +373,7 @@ impl FinderWindow {
     pub fn go_forward(&self) {
         let next = self.history.borrow_mut().go_forward();
         if let Some(target) = next {
+            self.column_container.navigate_root(&target);
             self.sync_path_ui(&target);
         }
     }
@@ -414,6 +426,11 @@ impl FinderWindow {
         let win = self.clone();
         self.sidebar.connect_tag_filter(move |event| {
             win.handle_tag_filter(event);
+        });
+
+        let win = self.clone();
+        self.column_container.connect_path_changed(move |path| {
+            win.sync_path_ui(path);
         });
     }
 
