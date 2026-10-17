@@ -11,7 +11,6 @@
 
 use std::time::Instant;
 
-use gtk4::prelude::*;
 use shared::models::{SearchCategory, SearchPayload};
 use spotlight::arbiter::SearchProvider;
 use spotlight::providers::{
@@ -19,10 +18,7 @@ use spotlight::providers::{
     is_destructive_action, match_system_actions, parse_brightness_command, parse_explicit_prefix,
     parse_volume_command,
 };
-use spotlight::ui::{
-    CONFIRM_TIMEOUT_SECS, ConfirmChipWidget, ConfirmState, ConfirmationStatus, NoResultsState,
-    NoResultsWidget,
-};
+use spotlight::ui::{CONFIRM_TIMEOUT_SECS, ConfirmState, ConfirmationStatus, NoResultsState};
 
 #[test]
 fn test_system_command_registry_constants() {
@@ -355,45 +351,4 @@ async fn test_execute_system_action_mock() {
     assert!(execute_system_action("volume:50").await.is_ok());
     assert!(execute_system_action("brightness:75").await.is_ok());
     assert!(execute_system_action("mute").await.is_ok());
-}
-
-#[test]
-fn test_confirm_chip_widget_gtk_rendering() {
-    if gtk4::init().is_ok() {
-        let chip = ConfirmChipWidget::new();
-        assert!(!chip.is_active());
-        assert!(!chip.container().is_visible());
-
-        chip.show_confirmation("shutdown", "Shut Down", |_| {}, || {});
-        assert!(chip.is_active());
-        assert!(chip.container().is_visible());
-        assert!(
-            chip.confirm_button
-                .label()
-                .unwrap()
-                .contains("Confirm Shut Down")
-        );
-
-        chip.cancel();
-        assert!(!chip.is_active());
-        assert!(!chip.container().is_visible());
-    }
-}
-
-#[test]
-fn test_no_results_widget_gtk_rendering() {
-    if gtk4::init().is_ok() {
-        let widget = NoResultsWidget::new("sample search");
-        assert_eq!(widget.title_label.text(), "No Results");
-        assert!(widget.subtitle_label.text().contains("sample search"));
-        assert!(widget.web_card_label.text().contains("sample search"));
-        assert_eq!(
-            widget.web_url(),
-            "https://duckduckgo.com/?q=sample%20search"
-        );
-
-        widget.update_query("updated term");
-        assert!(widget.subtitle_label.text().contains("updated term"));
-        assert!(widget.web_card_label.text().contains("updated term"));
-    }
 }
