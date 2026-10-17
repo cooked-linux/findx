@@ -199,44 +199,43 @@ fn test_footer_hint_shortcuts_integrity() {
 
 #[test]
 fn test_spotlight_window_lifecycle_if_gtk_available() {
-    if gtk4::init().is_ok() {
-        let window = SpotlightWindow::new(None);
-        assert_eq!(window.state(), OverlayState::Dormant);
-        assert_eq!(window.current_height(), INITIAL_HEIGHT);
-
-        assert!(window.set_state(OverlayState::Empty));
-        assert_eq!(window.state(), OverlayState::Empty);
-
-        assert!(window.set_state(OverlayState::ResultsList));
-        assert_eq!(window.state(), OverlayState::ResultsList);
-
-        assert!(window.set_state(OverlayState::Dormant));
-        assert_eq!(window.state(), OverlayState::Dormant);
-    }
-}
-
-#[test]
-fn test_clear_results_except_dock() {
     use gtk4::prelude::*;
-    if gtk4::init().is_ok() {
-        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        let dock = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        let row1 = gtk4::Label::new(Some("row1"));
-        let row2 = gtk4::Label::new(Some("row2"));
 
-        container.append(&dock);
-        container.append(&row1);
-        container.append(&row2);
-
-        spotlight::app::clear_results_except_dock(&container, &dock);
-
-        assert_eq!(
-            container.first_child().as_ref(),
-            Some(dock.upcast_ref::<gtk4::Widget>())
-        );
-        let has_no_sibling = container
-            .first_child()
-            .is_some_and(|c| c.next_sibling().is_none());
-        assert!(has_no_sibling);
+    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
+        return;
     }
+
+    let window = SpotlightWindow::new(None);
+    assert_eq!(window.state(), OverlayState::Dormant);
+    assert_eq!(window.current_height(), INITIAL_HEIGHT);
+
+    assert!(window.set_state(OverlayState::Empty));
+    assert_eq!(window.state(), OverlayState::Empty);
+
+    assert!(window.set_state(OverlayState::ResultsList));
+    assert_eq!(window.state(), OverlayState::ResultsList);
+
+    assert!(window.set_state(OverlayState::Dormant));
+    assert_eq!(window.state(), OverlayState::Dormant);
+
+    // Verify clear_results_except_dock logic
+    let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    let dock = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    let row1 = gtk4::Label::new(Some("row1"));
+    let row2 = gtk4::Label::new(Some("row2"));
+
+    container.append(&dock);
+    container.append(&row1);
+    container.append(&row2);
+
+    spotlight::app::clear_results_except_dock(&container, &dock);
+
+    assert_eq!(
+        container.first_child().as_ref(),
+        Some(dock.upcast_ref::<gtk4::Widget>())
+    );
+    let has_no_sibling = container
+        .first_child()
+        .is_some_and(|c| c.next_sibling().is_none());
+    assert!(has_no_sibling);
 }

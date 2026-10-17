@@ -305,73 +305,74 @@ fn test_provider_metadata_and_scope_routing() {
 
 #[test]
 fn test_dict_card_widget_ui_and_actions() {
-    if gtk4::init().is_ok() {
-        let card = DictionaryCard::new(
-            "serendipity",
-            Some("/ˌsɛr.ənˈdɪp.ɪ.ti/".to_string()),
-            vec![DefinitionSense::new(
-                "noun",
-                "The happy chance of finding something good while looking for something else.",
-                Some("A fortunate stroke of serendipity.".to_string()),
-            )],
-            vec!["chance".to_string(), "fortune".to_string()],
-            Some("Coined by Horace Walpole in 1754.".to_string()),
-            900.0,
-        );
-
-        let widget = DictCardWidget::new(&card);
-
-        // Verification of styling and text labels
-        assert_eq!(widget.headword_label.text(), "serendipity");
-        assert_eq!(widget.meta_label.text(), "noun · /ˌsɛr.ənˈdɪp.ɪ.ti/");
-        assert_eq!(
-            widget.body_label.text(),
-            "The happy chance of finding something good while looking for something else."
-        );
-        assert_eq!(widget.footer_label.text(), "Dictionary");
-
-        let dismissed = Rc::new(Cell::new(false));
-        let dismissed_clone = Rc::clone(&dismissed);
-        widget.connect_dismiss(move || {
-            dismissed_clone.set(true);
-        });
-
-        let copied_text = Rc::new(RefCell::new(String::new()));
-        let copied_clone = Rc::clone(&copied_text);
-        widget.connect_copied(move |text| {
-            *copied_clone.borrow_mut() = text.to_string();
-        });
-
-        // Test Enter action: copies clean definition text and triggers dismissal
-        assert!(widget.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
-        assert!(dismissed.get());
-        assert_eq!(
-            *copied_text.borrow(),
-            "The happy chance of finding something good while looking for something else."
-        );
-
-        // Reset and test KP_Enter
-        dismissed.set(false);
-        *copied_text.borrow_mut() = String::new();
-        assert!(widget.handle_key_press(gdk4::Key::KP_Enter, gdk4::ModifierType::empty()));
-        assert!(dismissed.get());
-        assert_eq!(
-            *copied_text.borrow(),
-            "The happy chance of finding something good while looking for something else."
-        );
-
-        // Reset and test Ctrl+C: copies headword and phonetic IPA transcription
-        dismissed.set(false);
-        *copied_text.borrow_mut() = String::new();
-        assert!(widget.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
-        assert!(dismissed.get());
-        assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
-
-        // Reset and test Super+C (Cmd+C on macOS/Wayland)
-        dismissed.set(false);
-        *copied_text.borrow_mut() = String::new();
-        assert!(widget.handle_key_press(gdk4::Key::C, gdk4::ModifierType::SUPER_MASK));
-        assert!(dismissed.get());
-        assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
+    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
+        return;
     }
+    let card = DictionaryCard::new(
+        "serendipity",
+        Some("/ˌsɛr.ənˈdɪp.ɪ.ti/".to_string()),
+        vec![DefinitionSense::new(
+            "noun",
+            "The happy chance of finding something good while looking for something else.",
+            Some("A fortunate stroke of serendipity.".to_string()),
+        )],
+        vec!["chance".to_string(), "fortune".to_string()],
+        Some("Coined by Horace Walpole in 1754.".to_string()),
+        900.0,
+    );
+
+    let widget = DictCardWidget::new(&card);
+
+    // Verification of styling and text labels
+    assert_eq!(widget.headword_label.text(), "serendipity");
+    assert_eq!(widget.meta_label.text(), "noun · /ˌsɛr.ənˈdɪp.ɪ.ti/");
+    assert_eq!(
+        widget.body_label.text(),
+        "The happy chance of finding something good while looking for something else."
+    );
+    assert_eq!(widget.footer_label.text(), "Dictionary");
+
+    let dismissed = Rc::new(Cell::new(false));
+    let dismissed_clone = Rc::clone(&dismissed);
+    widget.connect_dismiss(move || {
+        dismissed_clone.set(true);
+    });
+
+    let copied_text = Rc::new(RefCell::new(String::new()));
+    let copied_clone = Rc::clone(&copied_text);
+    widget.connect_copied(move |text| {
+        *copied_clone.borrow_mut() = text.to_string();
+    });
+
+    // Test Enter action: copies clean definition text and triggers dismissal
+    assert!(widget.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
+    assert!(dismissed.get());
+    assert_eq!(
+        *copied_text.borrow(),
+        "The happy chance of finding something good while looking for something else."
+    );
+
+    // Reset and test KP_Enter
+    dismissed.set(false);
+    *copied_text.borrow_mut() = String::new();
+    assert!(widget.handle_key_press(gdk4::Key::KP_Enter, gdk4::ModifierType::empty()));
+    assert!(dismissed.get());
+    assert_eq!(
+        *copied_text.borrow(),
+        "The happy chance of finding something good while looking for something else."
+    );
+
+    // Reset and test Ctrl+C: copies headword and phonetic IPA transcription
+    dismissed.set(false);
+    *copied_text.borrow_mut() = String::new();
+    assert!(widget.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
+    assert!(dismissed.get());
+    assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
+
+    // Reset and test Super+C (Cmd+C on macOS/Wayland)
+    dismissed.set(false);
+    *copied_text.borrow_mut() = String::new();
+    assert!(widget.handle_key_press(gdk4::Key::C, gdk4::ModifierType::SUPER_MASK));
+    assert!(dismissed.get());
+    assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
 }

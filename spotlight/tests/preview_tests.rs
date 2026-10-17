@@ -218,31 +218,32 @@ fn test_split_pane_geometry_state_transitions() {
     assert!(split_state.can_transition_to(OverlayState::Dormant));
 
     // Live widget lifecycle when GTK display is present
-    if gtk4::init().is_ok() {
-        let window = SpotlightWindow::new(None);
-        assert_eq!(window.current_width(), INITIAL_WIDTH);
-
-        // Transition through Empty and ResultsList
-        assert!(window.set_state(OverlayState::Empty));
-        assert!(window.set_state(OverlayState::ResultsList));
-
-        // Expand to split preview
-        window.animate_to_split_preview();
-        assert_eq!(window.state(), OverlayState::SplitPreview);
-
-        // Collapse to single column results
-        window.animate_to_results_width();
-        assert_eq!(window.state(), OverlayState::ResultsList);
-
-        // Toggle Quick Look
-        window.toggle_quick_look();
-        assert_eq!(window.state(), OverlayState::SplitPreview);
-
-        window.toggle_quick_look();
-        assert_eq!(window.state(), OverlayState::ResultsList);
-
-        // Dismissal resets geometry
-        window.dismiss();
-        assert_eq!(window.state(), OverlayState::Dormant);
+    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
+        return;
     }
+    let window = SpotlightWindow::new(None);
+    assert_eq!(window.current_width(), INITIAL_WIDTH);
+
+    // Transition through Empty and ResultsList
+    assert!(window.set_state(OverlayState::Empty));
+    assert!(window.set_state(OverlayState::ResultsList));
+
+    // Expand to split preview
+    window.animate_to_split_preview();
+    assert_eq!(window.state(), OverlayState::SplitPreview);
+
+    // Collapse to single column results
+    window.animate_to_results_width();
+    assert_eq!(window.state(), OverlayState::ResultsList);
+
+    // Toggle Quick Look
+    window.toggle_quick_look();
+    assert_eq!(window.state(), OverlayState::SplitPreview);
+
+    window.toggle_quick_look();
+    assert_eq!(window.state(), OverlayState::ResultsList);
+
+    // Dismissal resets geometry
+    window.dismiss();
+    assert_eq!(window.state(), OverlayState::Dormant);
 }

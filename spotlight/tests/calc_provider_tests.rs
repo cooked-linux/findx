@@ -149,72 +149,73 @@ fn test_provider_fast_path_and_scope_routing() {
 
 #[test]
 fn test_hero_card_ui_rendering_and_actions() {
-    if gtk4::init().is_ok() {
-        let calc = try_evaluate("25 * 4 + 10").expect("evaluation succeeded");
-        let card = CalcHeroCardWidget::new(&calc);
-
-        assert_eq!(card.expr_label.text(), "25 × 4 + 10");
-        assert_eq!(card.value_label.text(), "110");
-        assert_eq!(card.kind_label.text(), "Calculator");
-        assert_eq!(card.current_representation(), MathRepresentation::Decimal);
-
-        // Tab 1: Hexadecimal (110 = 0x6E)
-        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-        assert_eq!(card.value_label.text(), "0x6E");
-        assert_eq!(
-            card.current_representation(),
-            MathRepresentation::Hexadecimal
-        );
-
-        // Tab 2: Binary (110 = 0b1101110)
-        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-        assert_eq!(card.value_label.text(), "0b1101110");
-        assert_eq!(card.current_representation(), MathRepresentation::Binary);
-
-        // Tab 3: Scientific (110 = 1.1 × 10²)
-        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-        assert_eq!(card.value_label.text(), "1.1 × 10²");
-        assert_eq!(
-            card.current_representation(),
-            MathRepresentation::Scientific
-        );
-
-        // Tab 4: Wraps back to Decimal
-        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-        assert_eq!(card.value_label.text(), "110");
-        assert_eq!(card.current_representation(), MathRepresentation::Decimal);
-
-        // Part 2: Clipboard & dismissal actions
-        let calc_conv = try_evaluate("10 miles in km").expect("evaluation succeeded");
-        let card_conv = CalcHeroCardWidget::new(&calc_conv);
-
-        assert_eq!(card_conv.expr_label.text(), "10 miles");
-        assert_eq!(card_conv.value_label.text(), "16.09 km");
-        assert_eq!(card_conv.kind_label.text(), "Conversion");
-
-        let dismissed = Rc::new(Cell::new(false));
-        let dismissed_clone = Rc::clone(&dismissed);
-        card_conv.connect_dismiss(move || {
-            dismissed_clone.set(true);
-        });
-
-        let copied_text = Rc::new(RefCell::new(String::new()));
-        let copied_clone = Rc::clone(&copied_text);
-        card_conv.connect_copied(move |text| {
-            *copied_clone.borrow_mut() = text.to_string();
-        });
-
-        // Test Enter key action
-        assert!(card_conv.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
-        assert!(dismissed.get());
-        assert_eq!(*copied_text.borrow(), "16.09 km");
-
-        // Reset and test Ctrl+C
-        dismissed.set(false);
-        *copied_text.borrow_mut() = String::new();
-
-        assert!(card_conv.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
-        assert!(dismissed.get());
-        assert_eq!(*copied_text.borrow(), "16.09 km");
+    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
+        return;
     }
+    let calc = try_evaluate("25 * 4 + 10").expect("evaluation succeeded");
+    let card = CalcHeroCardWidget::new(&calc);
+
+    assert_eq!(card.expr_label.text(), "25 × 4 + 10");
+    assert_eq!(card.value_label.text(), "110");
+    assert_eq!(card.kind_label.text(), "Calculator");
+    assert_eq!(card.current_representation(), MathRepresentation::Decimal);
+
+    // Tab 1: Hexadecimal (110 = 0x6E)
+    assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+    assert_eq!(card.value_label.text(), "0x6E");
+    assert_eq!(
+        card.current_representation(),
+        MathRepresentation::Hexadecimal
+    );
+
+    // Tab 2: Binary (110 = 0b1101110)
+    assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+    assert_eq!(card.value_label.text(), "0b1101110");
+    assert_eq!(card.current_representation(), MathRepresentation::Binary);
+
+    // Tab 3: Scientific (110 = 1.1 × 10²)
+    assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+    assert_eq!(card.value_label.text(), "1.1 × 10²");
+    assert_eq!(
+        card.current_representation(),
+        MathRepresentation::Scientific
+    );
+
+    // Tab 4: Wraps back to Decimal
+    assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+    assert_eq!(card.value_label.text(), "110");
+    assert_eq!(card.current_representation(), MathRepresentation::Decimal);
+
+    // Part 2: Clipboard & dismissal actions
+    let calc_conv = try_evaluate("10 miles in km").expect("evaluation succeeded");
+    let card_conv = CalcHeroCardWidget::new(&calc_conv);
+
+    assert_eq!(card_conv.expr_label.text(), "10 miles");
+    assert_eq!(card_conv.value_label.text(), "16.09 km");
+    assert_eq!(card_conv.kind_label.text(), "Conversion");
+
+    let dismissed = Rc::new(Cell::new(false));
+    let dismissed_clone = Rc::clone(&dismissed);
+    card_conv.connect_dismiss(move || {
+        dismissed_clone.set(true);
+    });
+
+    let copied_text = Rc::new(RefCell::new(String::new()));
+    let copied_clone = Rc::clone(&copied_text);
+    card_conv.connect_copied(move |text| {
+        *copied_clone.borrow_mut() = text.to_string();
+    });
+
+    // Test Enter key action
+    assert!(card_conv.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
+    assert!(dismissed.get());
+    assert_eq!(*copied_text.borrow(), "16.09 km");
+
+    // Reset and test Ctrl+C
+    dismissed.set(false);
+    *copied_text.borrow_mut() = String::new();
+
+    assert!(card_conv.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
+    assert!(dismissed.get());
+    assert_eq!(*copied_text.borrow(), "16.09 km");
 }
