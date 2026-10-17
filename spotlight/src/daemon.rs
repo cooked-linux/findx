@@ -77,7 +77,7 @@ pub enum SingleInstanceDecision {
 /// # Errors
 /// Returns an error only on unrecoverable D-Bus protocol failure.
 pub async fn arbitrate_single_instance(
-    toggle: bool,
+    _toggle: bool,
     replace: bool,
     action_tx: mpsc::UnboundedSender<DaemonAction>,
 ) -> Result<SingleInstanceDecision, Box<dyn std::error::Error + Send + Sync>> {
@@ -111,18 +111,14 @@ pub async fn arbitrate_single_instance(
             Ok(SingleInstanceDecision::AcquiredPrimary(conn))
         }
         RequestNameReply::Exists | RequestNameReply::InQueue => {
-            if toggle {
+            if replace {
+                warn!("Could not replace existing Spotlight owner. Exiting.");
+            } else {
                 info!("Another Spotlight instance is running; sending Toggle via D-Bus");
                 let proxy = SpotlightClientProxy::new(&conn).await?;
                 if let Err(err) = proxy.toggle().await {
                     warn!("Failed to invoke Toggle on running instance: {err}");
                 }
-            } else if !replace {
-                warn!(
-                    "Spotlight instance is already running (use --replace or --toggle). Exiting."
-                );
-            } else {
-                warn!("Could not replace existing Spotlight owner. Exiting.");
             }
             Ok(SingleInstanceDecision::AlreadyRunningHandled)
         }
