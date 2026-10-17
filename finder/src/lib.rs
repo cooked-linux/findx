@@ -7,6 +7,8 @@ pub mod history;
 pub mod sidebar;
 pub mod sorting;
 pub mod ui;
+pub mod views;
 
 pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_user_bookmarks};
 pub use error::{FinderError, Result};
+pub use views::columns::{ColumnEntry, ColumnKind, ColumnViewModel};

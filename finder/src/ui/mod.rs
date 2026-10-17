@@ -1,3 +1,4 @@
+pub mod columns;
 pub mod group_header;
 pub mod header_bar;
 pub mod sidebar;

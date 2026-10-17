@@ -281,10 +281,111 @@ pub const FINDER_CSS: &str = r"
     font-weight: 700;
     color: var(--tx);
 }
-.group-count {
-    font-size: 12px;
+/* Miller Columns Navigation View */
+.column-scrolled-window {
+    background-color: var(--g);
+    border-right: 1px solid var(--ln);
+}
+.cl {
+    min-width: 160px;
+    background-color: var(--g);
+    padding: 4px;
+}
+.rw {
+    min-height: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    color: var(--tx);
+    font-size: 13px;
+    margin: 1px 2px;
+    transition: background-color 100ms ease;
+}
+.rw:hover {
+    background-color: var(--hv);
+}
+.rw.on {
+    background-color: var(--ac);
+    color: #ffffff;
+}
+.rw.on label {
+    color: #ffffff;
+}
+.rw.on .chevron {
+    color: #ffffff;
+}
+.rw.ia {
+    background-color: var(--ib);
+}
+.column-icon {
+    min-width: 16px;
+    min-height: 16px;
+}
+.column-icon.fi {
+    color: #4ea1f0;
+}
+.column-icon.fl {
     color: var(--mu);
-    font-weight: 500;
+}
+.rw.on .column-icon {
+    color: #ffffff;
+}
+.chevron {
+    font-size: 13px;
+    color: var(--mu);
+    margin-left: 4px;
+}
+.column-divider {
+    min-width: 5px;
+    width: 5px;
+    background-color: transparent;
+    cursor: col-resize;
+    transition: background-color 150ms ease;
+}
+.column-divider:hover {
+    background-color: var(--ac);
+}
+.column-divider.dragging {
+    background-color: var(--ac);
+}
+
+/* Terminal Leaf Preview Column */
+.preview-column {
+    min-width: 240px;
+    padding: 22px 20px;
+    background-color: var(--g);
+}
+.preview-card {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background-color: var(--cd);
+    border: 1px solid var(--ln);
+    line-height: 1.9;
+}
+.preview-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--tx);
+    margin-top: 12px;
+}
+.preview-subtitle {
+    color: var(--mu);
+    font-size: 13px;
+}
+.preview-btn {
+    padding: 5px 14px;
+    border-radius: 8px;
+    background-color: var(--ib);
+    color: var(--tx);
+    font-size: 13px;
+}
+.preview-btn:hover {
+    background-color: var(--hv);
+}
+.preview-btn.primary {
+    background-color: var(--ac);
+    color: #ffffff;
 }
 ";
 
