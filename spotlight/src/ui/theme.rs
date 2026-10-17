@@ -145,6 +145,42 @@ pub const SPOTLIGHT_CSS: &str = r"
     color: var(--mu);
 }
 
+/* Lexical Dictionary Definition Card */
+.card.def, .def {
+    margin: 12px 14px;
+    padding: 22px 28px;
+    border-radius: 14px;
+    background: var(--card);
+    border: 1px solid var(--dv);
+}
+
+.def-headword, .def h3, h3 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: -0.4px;
+    color: var(--tx);
+}
+
+.def-meta, .def .m {
+    color: var(--mu);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.def-body, .def p, p {
+    margin: 8px 0 0;
+    font-size: 16px;
+    line-height: 1.45;
+    color: var(--tx);
+}
+
+.def-footer {
+    color: var(--mu);
+    font-size: 14px;
+    margin-top: 10px;
+}
+
 /* No Results Fallback View */
 .empty {
     padding: 34px 20px 22px;
@@ -259,6 +295,7 @@ mod tests {
         assert!(SPOTLIGHT_CSS.contains(".cx"));
         assert!(SPOTLIGHT_CSS.contains(".cv"));
         assert!(SPOTLIGHT_CSS.contains(".ck"));
+        assert!(SPOTLIGHT_CSS.contains(".def"));
         assert!(SPOTLIGHT_CSS.contains(".empty"));
         assert!(SPOTLIGHT_CSS.contains(".confirm-bar"));
     }

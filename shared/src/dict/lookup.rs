@@ -42,7 +42,7 @@ const fn is_combining_mark(c: char) -> bool {
 pub fn parse_trigger(query: &str) -> (bool, String) {
     let trimmed = query.trim();
 
-    for prefix in ["define ", "dict ", "meaning of "] {
+    for prefix in ["define ", "dict ", "dict:", "meaning of "] {
         if let Some(rest) = strip_prefix_ignore_case(trimmed, prefix) {
             return (true, rest.trim().to_string());
         }
