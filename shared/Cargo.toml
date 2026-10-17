@@ -34,6 +34,8 @@ notify = "6.1"
 # Database & Indexing
 rusqlite = { version = "0.33", features = ["bundled", "vtab", "backup"] }
 fuzzy-matcher = "0.3"
+rust-stemmers = "1.2"
+unicode-normalization = "0.1"
 
 # IPC & D-Bus
 zbus = { version = "5.5", features = ["tokio"] }

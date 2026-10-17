@@ -3,6 +3,7 @@
 pub mod calc;
 pub mod db;
 pub mod desktop;
+pub mod dict;
 pub mod errors;
 pub mod frecency;
 pub mod fs;
@@ -19,6 +20,11 @@ pub use db::{
 
 pub use desktop::{
     DesktopApp, DesktopError, calculate_text_score, resolve_icon_path, scan_installed_apps,
+};
+
+pub use dict::{
+    DefinitionSense, DictError, DictionaryCard, DictionaryStorage, Lemmatizer, normalize_key,
+    parse_trigger, resolve_query,
 };
 
 pub use errors::{DbError, FsError, IpcError, ModelError, Result, SharedError, XattrError};
