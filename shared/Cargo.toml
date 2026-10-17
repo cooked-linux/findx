@@ -38,6 +38,12 @@ fuzzy-matcher = "0.3"
 # IPC & D-Bus
 zbus = { version = "5.5", features = ["tokio"] }
 
+# Image processing & Hashing
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp"] }
+md-5 = "0.10"
+png = "0.18"
+tempfile = "3.17"
+
 [dev-dependencies]
 tempfile = "3.17"
 tokio = { version = "1.43", features = ["macros"] }
