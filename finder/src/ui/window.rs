@@ -15,6 +15,7 @@ use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
 use super::view_mode::ViewMode;
 use crate::breadcrumbs::FinderPreferences;
+use crate::coordinator::NavigationCoordinator;
 use crate::history::NavigationHistory;
 use crate::sidebar::config::SidebarConfig;
 use crate::sidebar::tags::TagFilterEvent;
@@ -111,6 +112,8 @@ pub struct FinderWindow {
     pub breadcrumbs_box: gtk4::Box,
     /// Label displaying active path breadcrumbs.
     pub breadcrumbs_label: gtk4::Label,
+    /// Central navigation coordinator synchronizing sidebar, views, header bar, and path bar.
+    pub coordinator: Rc<NavigationCoordinator>,
     /// Navigation history stack tracking forward/backward traversal.
     pub history: Rc<RefCell<NavigationHistory>>,
     /// Current active view mode.
@@ -160,6 +163,7 @@ impl FinderWindow {
         root_box.append(&layout.paned);
         window.set_content(Some(&root_box));
 
+        let coordinator = Rc::new(NavigationCoordinator::new(&initial_path_buf));
         let history = Rc::new(RefCell::new(NavigationHistory::new(&initial_path_buf)));
         let view_mode = Rc::new(RefCell::new(ViewMode::Columns));
 
@@ -176,11 +180,13 @@ impl FinderWindow {
             path_bar: layout.path_bar,
             breadcrumbs_box: layout.breadcrumbs_box,
             breadcrumbs_label: layout.breadcrumbs_label,
+            coordinator,
             history,
             view_mode,
         };
 
         finder_win.sync_path_ui(&initial_path_buf);
+        finder_win.wire_coordinator();
         finder_win.wire_signals();
         finder_win.wire_keyboard_shortcuts();
 
@@ -386,36 +392,52 @@ impl FinderWindow {
     pub fn navigate_to(&self, target: impl AsRef<Path>) {
         let target_buf = target.as_ref().to_path_buf();
         self.history.borrow_mut().navigate_to(&target_buf);
+        self.coordinator.navigate_to(&target_buf);
         self.column_container.navigate_root(&target_buf);
         self.list_view.navigate_root(&target_buf);
-        self.sync_path_ui(&target_buf);
     }
 
     /// Navigates back one step in history.
     pub fn go_back(&self) {
-        let prev = self.history.borrow_mut().go_back();
-        if let Some(target) = prev {
+        if let Some(target) = self.coordinator.go_back() {
+            self.history.borrow_mut().navigate_to(&target);
             self.column_container.navigate_root(&target);
             self.list_view.navigate_root(&target);
-            self.sync_path_ui(&target);
         }
     }
 
     /// Navigates forward one step in history.
     pub fn go_forward(&self) {
-        let next = self.history.borrow_mut().go_forward();
-        if let Some(target) = next {
+        if let Some(target) = self.coordinator.go_forward() {
+            self.history.borrow_mut().navigate_to(&target);
             self.column_container.navigate_root(&target);
             self.list_view.navigate_root(&target);
-            self.sync_path_ui(&target);
         }
+    }
+
+    /// Returns the currently active view mode.
+    #[must_use]
+    pub fn view_mode(&self) -> ViewMode {
+        self.coordinator.view_mode()
     }
 
     /// Switches the active view mode (Icons, List, Columns).
     pub fn set_view_mode(&self, mode: ViewMode) {
+        self.coordinator.set_view_mode(mode);
         *self.view_mode.borrow_mut() = mode;
         self.stack.set_visible_child_name(mode.as_str());
         self.header_bar.set_view_mode(mode);
+
+        let curr = self.coordinator.current_path();
+        match mode {
+            ViewMode::Columns => {
+                self.column_container.navigate_root(&curr);
+            }
+            ViewMode::List => {
+                self.list_view.navigate_root(&curr);
+            }
+            ViewMode::Icons => {}
+        }
     }
 
     /// Synchronizes header bar title, history buttons, and breadcrumb path.
@@ -424,15 +446,28 @@ impl FinderWindow {
         self.header_bar.set_title(title, Some("folder-symbolic"));
         self.breadcrumbs_label
             .set_text(path.to_string_lossy().as_ref());
-        self.path_bar.set_path(path, None);
+        self.path_bar
+            .set_path(path, self.coordinator.selection().as_deref());
 
-        let (can_back, can_forward) = {
-            let hist = self.history.borrow();
-            (hist.can_go_back(), hist.can_go_forward())
-        };
+        let can_back = self.coordinator.can_go_back();
+        let can_forward = self.coordinator.can_go_forward();
         self.header_bar
             .update_history_buttons(can_back, can_forward);
         self.sidebar.set_active_path(path);
+    }
+
+    fn wire_coordinator(&self) {
+        let win = self.clone();
+        self.coordinator.connect_path_changed(move |path| {
+            win.sync_path_ui(path);
+        });
+
+        let win = self.clone();
+        self.coordinator
+            .connect_selection_changed(move |selection| {
+                let curr = win.coordinator.current_path();
+                win.path_bar.set_path(&curr, selection);
+            });
     }
 
     /// Wires header bar button interactions to window handlers.
@@ -464,12 +499,20 @@ impl FinderWindow {
 
         let win = self.clone();
         self.column_container.connect_path_changed(move |path| {
-            win.sync_path_ui(path);
+            if path.is_dir() {
+                win.coordinator.navigate_to(path);
+            } else {
+                win.coordinator.set_selection(Some(path));
+            }
         });
 
         let win = self.clone();
         self.list_view.connect_path_changed(move |path| {
-            win.sync_path_ui(path);
+            if path.is_dir() {
+                win.coordinator.navigate_to(path);
+            } else {
+                win.coordinator.set_selection(Some(path));
+            }
         });
 
         let win = self.clone();
