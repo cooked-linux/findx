@@ -281,6 +281,112 @@ pub const FINDER_CSS: &str = r"
     font-weight: 700;
     color: var(--tx);
 }
+/* Hierarchical List View (Nested list) */
+.hierarchical-list-view {
+    background-color: var(--g);
+}
+.hd {
+    min-height: 28px;
+    height: 28px;
+    background-color: var(--sb);
+    border-bottom: 1px solid var(--ln);
+    padding: 0 8px;
+}
+.hd-cell {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--mu);
+    padding: 4px 6px;
+    border-radius: 4px;
+    background-color: transparent;
+    transition: background-color 100ms ease, color 100ms ease;
+}
+.hd-cell:hover {
+    background-color: var(--hv);
+    color: var(--tx);
+}
+.hd-sort-arrow {
+    font-size: 9px;
+    margin-left: 4px;
+    color: var(--ac);
+}
+.list-scrolled-window {
+    background-color: var(--g);
+}
+.r {
+    min-height: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    color: var(--tx);
+    font-size: 13px;
+    margin: 1px 2px;
+    transition: background-color 100ms ease;
+}
+.r:hover {
+    background-color: var(--hv);
+}
+.r.on {
+    background-color: var(--ac);
+    color: #ffffff;
+}
+.r.on label {
+    color: #ffffff;
+}
+.r.on .disclosure-chevron {
+    color: #ffffff;
+}
+.r.on .column-icon {
+    color: #ffffff;
+}
+.r.on .dc-date,
+.r.on .dc-size,
+.r.on .dc-kind {
+    color: rgba(255, 255, 255, 0.85);
+}
+.dc {
+    padding: 0 4px;
+}
+.dc-name {
+    min-width: 200px;
+    width: 320px;
+}
+.dc-date {
+    width: 150px;
+    color: var(--mu);
+    font-size: 12px;
+}
+.dc-size {
+    width: 140px;
+    color: var(--mu);
+    font-size: 12px;
+}
+.dc-kind {
+    width: 120px;
+    color: var(--mu);
+    font-size: 12px;
+}
+.dc-tags {
+    width: 80px;
+}
+.disclosure-chevron {
+    font-size: 11px;
+    color: var(--mu);
+    min-width: 16px;
+    padding: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: transparent;
+}
+.disclosure-chevron:hover {
+    background-color: var(--hv);
+    color: var(--tx);
+}
+.disclosure-spinner {
+    min-width: 16px;
+    min-height: 16px;
+}
+
 /* Miller Columns Navigation View */
 .column-scrolled-window {
     background-color: var(--g);
@@ -430,5 +536,8 @@ mod tests {
         assert!(FINDER_CSS.contains(".action-btn"));
         assert!(FINDER_CSS.contains(".finder-search"));
         assert!(FINDER_CSS.contains(".finder-breadcrumbs"));
+        assert!(FINDER_CSS.contains(".hd"));
+        assert!(FINDER_CSS.contains(".r"));
+        assert!(FINDER_CSS.contains(".dc"));
     }
 }
