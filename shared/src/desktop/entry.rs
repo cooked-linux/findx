@@ -409,13 +409,19 @@ fn parse_locale_string(locale: &str) -> (Option<&str>, Option<&str>, Option<&str
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::similar_names
+)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
 
     #[test]
     fn test_parse_basic_desktop_entry() {
-        let content = r#"
+        let content = r"
 [Desktop Entry]
 Type=Application
 Name=Calculator
@@ -429,7 +435,7 @@ MimeType=text/plain;
 Terminal=false
 NoDisplay=false
 Hidden=false
-"#;
+";
         let app = DesktopApp::from_content(
             content,
             PathBuf::from("/usr/share/applications/calculator.desktop"),
@@ -457,40 +463,40 @@ Hidden=false
 
     #[test]
     fn test_localized_name_lookup() {
-        let content = r#"
+        let content = r"
 [Desktop Entry]
 Type=Application
 Name=Calculator
 Name[es]=Calculadora
 Name[fr]=Calculatrice
 Exec=calculator
-"#;
-        let app_es = DesktopApp::parse_content(
+";
+        let app_spanish = DesktopApp::parse_content(
             content,
             &PathBuf::from("/test.desktop"),
             "test.desktop",
             Some("es_ES.UTF-8"),
         )
         .expect("valid");
-        assert_eq!(app_es.name, "Calculadora");
+        assert_eq!(app_spanish.name, "Calculadora");
 
-        let app_fr = DesktopApp::parse_content(
+        let app_french = DesktopApp::parse_content(
             content,
             &PathBuf::from("/test.desktop"),
             "test.desktop",
             Some("fr_FR"),
         )
         .expect("valid");
-        assert_eq!(app_fr.name, "Calculatrice");
+        assert_eq!(app_french.name, "Calculatrice");
 
-        let app_en = DesktopApp::parse_content(
+        let app_english = DesktopApp::parse_content(
             content,
             &PathBuf::from("/test.desktop"),
             "test.desktop",
             Some("en_US"),
         )
         .expect("valid");
-        assert_eq!(app_en.name, "Calculator");
+        assert_eq!(app_english.name, "Calculator");
     }
 
     #[test]
@@ -520,7 +526,7 @@ Exec=calculator
 
     #[test]
     fn test_actions_group_ignored() {
-        let content = r#"
+        let content = r"
 [Desktop Entry]
 Type=Application
 Name=Main
@@ -529,7 +535,7 @@ Exec=main_exec
 [Desktop Action New]
 Name=Action
 Exec=action_exec
-"#;
+";
         let app = DesktopApp::from_content(content, PathBuf::from("/test"), "test")
             .expect("should parse");
         assert_eq!(app.name, "Main");

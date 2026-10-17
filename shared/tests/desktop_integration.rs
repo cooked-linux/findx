@@ -11,7 +11,9 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
-    clippy::float_cmp
+    clippy::float_cmp,
+    clippy::assert_is_empty,
+    clippy::needless_raw_string_hashes
 )]
 
 use std::fs::{File, create_dir_all};
@@ -26,7 +28,7 @@ use shared::desktop::{
 
 #[test]
 fn test_parse_synthetic_desktop_entries() {
-    let content = r#"
+    let content = r"
 [Desktop Entry]
 Type=Application
 Version=1.5
@@ -47,7 +49,7 @@ Terminal=false
 NoDisplay=false
 Hidden=false
 OnlyShowIn=GNOME;KDE;X-Cinnamon;
-"#;
+";
 
     let path = PathBuf::from("/usr/share/applications/code.desktop");
 
@@ -207,7 +209,7 @@ fn test_desktop_visibility_integration() {
 
     // KDE session
     let apps_kde = scan_application_dirs(&dirs, Some("KDE"), None).expect("scan KDE");
-    assert!(apps_kde.is_empty());
+    assert_eq!(apps_kde, [] as [DesktopApp; 0]);
 }
 
 #[test]

@@ -101,6 +101,12 @@ pub fn calculate_text_score(query: &str, app: &DesktopApp) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::float_cmp
+)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -149,21 +155,21 @@ mod tests {
     fn test_tier2_prefix_match() {
         let app = make_test_app("Chrome", "chrome", None, vec![], vec![]);
         let score = calculate_text_score("chr", &app);
-        assert!(score >= 800.0 && score < 1000.0);
+        assert!((800.0..1000.0).contains(&score));
     }
 
     #[test]
     fn test_tier3_acronym_match() {
         let app = make_test_app("Google Chrome", "google-chrome", None, vec![], vec![]);
         let score = calculate_text_score("gc", &app);
-        assert!(score >= 600.0 && score < 800.0);
+        assert!((600.0..800.0).contains(&score));
     }
 
     #[test]
     fn test_tier4_word_boundary_match() {
         let app = make_test_app("LibreOffice Calc", "soffice", None, vec![], vec![]);
         let score = calculate_text_score("calc", &app);
-        assert!(score >= 500.0 && score < 600.0);
+        assert!((500.0..600.0).contains(&score));
     }
 
     #[test]
@@ -199,7 +205,7 @@ mod tests {
     fn test_tier7_substring_fallback() {
         let app = make_test_app("SuperDuperApp", "super", None, vec![], vec![]);
         let score = calculate_text_score("duper", &app);
-        assert!(score >= 10.0 && score < 100.0);
+        assert!((10.0..100.0).contains(&score));
     }
 
     #[test]

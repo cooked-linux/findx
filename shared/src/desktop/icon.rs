@@ -235,6 +235,7 @@ fn strip_icon_extension(name: &str) -> &str {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::fs::{File, create_dir_all};

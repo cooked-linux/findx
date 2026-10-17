@@ -344,8 +344,8 @@ cargo fmt --all -- --check
 # Format code in-place
 cargo fmt --all
 
-# Run Clippy with warnings treated as errors
-cargo clippy --workspace --all-targets -- -D warnings
+# Run Clippy with warnings treated as errors across all targets and features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 ### Running Applications
