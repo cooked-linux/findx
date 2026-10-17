@@ -88,6 +88,34 @@ pub const SPOTLIGHT_CSS: &str = r"
     color: var(--tx);
     margin-right: 4px;
 }
+
+/* Empty State Suggested Apps */
+.empty-state {
+    padding: 16px 20px 20px 20px;
+    border-top: 1px solid var(--dv);
+}
+
+.suggested-dock {
+    padding: 4px 0;
+}
+
+
+.suggested-app-item {
+    border-radius: 14px;
+    padding: 10px 14px;
+    min-width: 80px;
+    transition: background 120ms ease;
+}
+
+.suggested-app-item:hover, .suggested-app-item.selected {
+    background-color: var(--hv);
+}
+
+.suggested-app-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--tx);
+}
 ";
 
 /// Initializes the global CSS styling provider and connects `StyleManager` theme switching.

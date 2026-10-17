@@ -1,10 +1,13 @@
 //! Spotlight user interface components.
 
+pub mod empty_state;
 pub mod search_bar;
 pub mod theme;
 pub mod window;
 
-pub use search_bar::{KeyAction, SearchBarWidget, map_key_to_action};
+pub use empty_state::{EmptyStateSelection, EmptyStateWidget, fetch_suggested_apps};
+pub use search_bar::{KeyAction, SearchBarWidget, compute_ghost_completion, map_key_to_action};
+
 pub use theme::{SPOTLIGHT_CSS, apply_theme_classes, init_theme};
 pub use window::{
     ANIMATION_DURATION_MS, ANIMATION_DURATION_US, FOOTER_HINT_HEIGHT, FOOTER_HINT_SHORTCUTS,

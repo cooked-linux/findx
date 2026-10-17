@@ -6,6 +6,8 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 
+pub use crate::providers::compute_ghost_completion;
+
 /// Actions emitted on special navigation keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
@@ -51,6 +53,7 @@ pub struct SearchBarWidget {
     pub entry: gtk4::Text,
     /// Overlaid dimmed completion label.
     pub ghost_label: gtk4::Label,
+    ghost_suffix: Rc<RefCell<String>>,
     query_cbs: Rc<RefCell<Vec<QueryCallback>>>,
     key_cbs: Rc<RefCell<Vec<KeyActionCallback>>>,
 }
@@ -107,6 +110,7 @@ impl SearchBarWidget {
         container.append(&icon);
         container.append(&overlay);
 
+        let ghost_suffix = Rc::new(RefCell::new(String::new()));
         let query_cbs: Rc<RefCell<Vec<QueryCallback>>> = Rc::new(RefCell::new(Vec::new()));
         let key_cbs: Rc<RefCell<Vec<KeyActionCallback>>> = Rc::new(RefCell::new(Vec::new()));
 
@@ -120,7 +124,36 @@ impl SearchBarWidget {
 
         let key_controller = gtk4::EventControllerKey::new();
         let key_cbs_clone = Rc::clone(&key_cbs);
+        let ghost_suffix_key = Rc::clone(&ghost_suffix);
+        let ghost_label_key = ghost_label.clone();
+        let entry_key = entry.clone();
+
         key_controller.connect_key_pressed(move |_, key, _, modifiers| {
+            // Check for inline completion acceptance on Tab or Right Arrow
+            if key == gdk4::Key::Tab || key == gdk4::Key::ISO_Left_Tab {
+                let suffix = ghost_suffix_key.borrow().clone();
+                if !suffix.is_empty() {
+                    let current = entry_key.text();
+                    entry_key.set_text(&format!("{current}{suffix}"));
+                    ghost_suffix_key.borrow_mut().clear();
+                    ghost_label_key.set_text("");
+                    entry_key.set_position(-1);
+                    return glib::Propagation::Stop;
+                }
+            } else if key == gdk4::Key::Right {
+                let suffix = ghost_suffix_key.borrow().clone();
+                let pos = entry_key.position();
+                let len = i32::try_from(entry_key.text().chars().count()).unwrap_or(0);
+                if !suffix.is_empty() && pos >= len {
+                    let current = entry_key.text();
+                    entry_key.set_text(&format!("{current}{suffix}"));
+                    ghost_suffix_key.borrow_mut().clear();
+                    ghost_label_key.set_text("");
+                    entry_key.set_position(-1);
+                    return glib::Propagation::Stop;
+                }
+            }
+
             map_key_to_action(key, modifiers).map_or(glib::Propagation::Proceed, |action| {
                 for cb in &*key_cbs_clone.borrow() {
                     cb(action);
@@ -135,6 +168,7 @@ impl SearchBarWidget {
             icon,
             entry,
             ghost_label,
+            ghost_suffix,
             query_cbs,
             key_cbs,
         }
@@ -164,18 +198,53 @@ impl SearchBarWidget {
     /// Clears the input field and ghost completion text.
     pub fn clear(&self) {
         self.entry.set_text("");
+        self.clear_ghost();
+    }
+
+    /// Clears ghost completion text and buffer.
+    pub fn clear_ghost(&self) {
+        self.ghost_suffix.borrow_mut().clear();
         self.ghost_label.set_text("");
+    }
+
+    /// Sets ghost completion suffix formatted with transparent prefix markup.
+    pub fn set_ghost_completion(&self, prefix: &str, suffix: &str) {
+        *self.ghost_suffix.borrow_mut() = suffix.to_string();
+        if suffix.is_empty() {
+            self.ghost_label.set_text("");
+        } else {
+            let escaped_prefix = glib::markup_escape_text(prefix);
+            let escaped_suffix = glib::markup_escape_text(suffix);
+            self.ghost_label.set_markup(&format!(
+                "<span foreground=\"transparent\">{escaped_prefix}</span>{escaped_suffix}"
+            ));
+        }
     }
 
     /// Sets ghost text for inline autocompletion hints.
     pub fn set_ghost_text(&self, text: &str) {
+        *self.ghost_suffix.borrow_mut() = text.to_string();
         self.ghost_label.set_text(text);
     }
 
     /// Gets current ghost text.
     #[must_use]
     pub fn ghost_text(&self) -> String {
-        self.ghost_label.text().to_string()
+        self.ghost_suffix.borrow().clone()
+    }
+
+    /// Explicitly accepts ghost completion, appending the suffix to the text entry.
+    #[must_use]
+    pub fn accept_ghost_completion(&self) -> bool {
+        let suffix = self.ghost_suffix.borrow().clone();
+        if suffix.is_empty() {
+            return false;
+        }
+        let current = self.text();
+        self.set_text(&format!("{current}{suffix}"));
+        self.clear_ghost();
+        self.entry.set_position(-1);
+        true
     }
 
     /// Selects all characters inside the input entry.

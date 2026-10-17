@@ -3,4 +3,5 @@
 pub mod arbiter;
 pub mod error;
 pub mod hotkey;
+pub mod providers;
 pub mod ui;
