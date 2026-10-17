@@ -241,6 +241,66 @@ pub const SPOTLIGHT_CSS: &str = r"
     padding: 6px 14px;
     border: 1px solid var(--dv);
 }
+
+/* File and Search Result Row */
+.row {
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 10px;
+    transition: background 120ms ease;
+}
+
+.row:hover {
+    background-color: var(--hv);
+}
+
+.row.sel, .row.selected {
+    background-color: #0a6cff;
+    color: #ffffff;
+}
+
+.row .n {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--tx);
+}
+
+.row.sel .n, .row.selected .n {
+    color: #ffffff;
+}
+
+.row .t {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--mu);
+}
+
+.row.sel .t, .row.selected .t {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.ic, .file-icon-chip {
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 7px;
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.ic.pdf, .file-icon-chip.pdf {
+    background-image: linear-gradient(160deg, #ff6a5f, #e63b3b);
+}
+
+.ic.office, .file-icon-chip.office {
+    background-image: linear-gradient(160deg, #3ecf72, #1e9c4d);
+}
+
+.ic.document, .file-icon-chip.document {
+    background-image: linear-gradient(160deg, #4f8dff, #2f62e0);
+}
+
+.ic.folder, .file-icon-chip.folder {
+    background-image: linear-gradient(160deg, #5ac8fa, #2f8fe0);
+}
 ";
 
 /// Initializes the global CSS styling provider and connects `StyleManager` theme switching.
@@ -298,5 +358,8 @@ mod tests {
         assert!(SPOTLIGHT_CSS.contains(".def"));
         assert!(SPOTLIGHT_CSS.contains(".empty"));
         assert!(SPOTLIGHT_CSS.contains(".confirm-bar"));
+        assert!(SPOTLIGHT_CSS.contains(".row"));
+        assert!(SPOTLIGHT_CSS.contains(".ic"));
+        assert!(SPOTLIGHT_CSS.contains(".file-icon-chip"));
     }
 }
