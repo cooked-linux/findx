@@ -696,10 +696,19 @@ name = "finder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "gdk4",
+ "gio",
+ "glib",
+ "gtk4",
+ "libadwaita",
+ "serde",
+ "serde_json",
  "shared",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "zbus",
 ]
 
 [[package]]
