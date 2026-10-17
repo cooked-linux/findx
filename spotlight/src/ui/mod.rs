@@ -1,13 +1,17 @@
 //! Spotlight user interface components.
 
 pub mod calc_card;
+pub mod confirm_chip;
 pub mod empty_state;
+pub mod no_results;
 pub mod search_bar;
 pub mod theme;
 pub mod window;
 
 pub use calc_card::{CalcHeroCardWidget, MathRepresentation};
+pub use confirm_chip::{CONFIRM_TIMEOUT_SECS, ConfirmChipWidget, ConfirmState, ConfirmationStatus};
 pub use empty_state::{EmptyStateSelection, EmptyStateWidget, fetch_suggested_apps};
+pub use no_results::{NoResultsState, NoResultsWidget};
 pub use search_bar::{KeyAction, SearchBarWidget, compute_ghost_completion, map_key_to_action};
 
 pub use theme::{SPOTLIGHT_CSS, apply_theme_classes, init_theme};

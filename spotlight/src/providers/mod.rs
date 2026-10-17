@@ -2,6 +2,8 @@
 
 pub mod app_provider;
 pub mod calc_provider;
+pub mod system_provider;
+pub mod web_provider;
 
 pub use app_provider::{
     AppLaunchError, ApplicationProvider, compute_ghost_completion, find_default_terminal,
@@ -10,3 +12,8 @@ pub use app_provider::{
     wrap_in_terminal_emulator,
 };
 pub use calc_provider::CalculatorProvider;
+pub use system_provider::{
+    SYSTEM_COMMANDS, SystemActionProvider, SystemCommand, execute_system_action,
+    is_destructive_action, match_system_actions, parse_brightness_command, parse_volume_command,
+};
+pub use web_provider::{SearchEngine, WebSearchProvider, open_browser_url, parse_explicit_prefix};
