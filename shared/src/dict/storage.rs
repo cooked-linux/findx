@@ -82,9 +82,18 @@ impl DictionaryStorage {
             return Self::open(user_path).map(Some);
         }
 
+        if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("spotlight_linux/dictionaries")
+            && let Some(user_path) = xdg_dirs.find_data_file("dictionary.db")
+            && user_path.exists()
+        {
+            return Self::open(user_path).map(Some);
+        }
+
         for sys_path in [
             "/usr/share/findx/dictionary.db",
             "/usr/local/share/findx/dictionary.db",
+            "/usr/share/stardict/dic/dictionary.db",
+            "/usr/share/spotlight_linux/dictionaries/dictionary.db",
         ] {
             let p = Path::new(sys_path);
             if p.exists() {
