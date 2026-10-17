@@ -409,7 +409,8 @@ mod tests {
         let root = temp_dir.path().to_path_buf();
 
         let mut watcher =
-            FileWatcher::with_debounce(&[root.clone()], Duration::from_millis(50)).unwrap();
+            FileWatcher::with_debounce(std::slice::from_ref(&root), Duration::from_millis(50))
+                .unwrap();
 
         // Create a file
         let file_path = root.join("test_real.txt");

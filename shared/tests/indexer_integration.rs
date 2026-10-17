@@ -5,7 +5,8 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
-    clippy::assert_is_empty
+    clippy::assert_is_empty,
+    clippy::significant_drop_tightening
 )]
 
 use std::fs::File;
@@ -69,8 +70,9 @@ fn test_crawler_mock_hierarchy_skips_blacklist_and_avoids_cycles() {
     let _ = std::os::unix::fs::symlink(&main_rs, &symlink_to_file);
 
     // Execute crawler
-    let config = CrawlerConfig::new(vec![root.clone()]);
+    let config = CrawlerConfig::new(vec![root]);
     let crawler = DirectoryCrawler::new(config);
+
     let files = crawler.crawl_all().unwrap();
     let discovered_paths: Vec<_> = files.iter().map(|f| &f.path).collect();
 
@@ -171,6 +173,13 @@ fn test_pipeline_insert_and_query_bm25_and_snippets() {
 
     // Query for 'search'
     let hits = search_indexed_files(&conn, "search", 10).unwrap();
+    // Builder query execution
+    let builder_hits = SearchQueryBuilder::new("hybrid")
+        .limit(5)
+        .execute(&conn)
+        .unwrap();
+    drop(conn);
+
     assert_eq!(hits.len(), 2);
 
     // search_notes.txt starts with 'search' so it receives the 100.0 filename prefix bonus
@@ -183,11 +192,6 @@ fn test_pipeline_insert_and_query_bm25_and_snippets() {
     let snip = hits[1].snippet.as_ref().unwrap();
     assert!(snip.contains("<b>search</b>") || snip.contains("search"));
 
-    // Builder query execution
-    let builder_hits = SearchQueryBuilder::new("hybrid")
-        .limit(5)
-        .execute(&conn)
-        .unwrap();
     assert_eq!(builder_hits.len(), 1);
     assert_eq!(builder_hits[0].path, file_intro);
 }
@@ -219,6 +223,8 @@ fn test_pipeline_file_deletion_removes_both_tables() {
         let fts_count: i64 = conn
             .query_row("SELECT COUNT(1) FROM files_fts;", [], |r| r.get(0))
             .unwrap();
+        drop(conn);
+
         assert_eq!(records_count, 1);
         assert_eq!(fts_count, 1);
     }
@@ -236,6 +242,8 @@ fn test_pipeline_file_deletion_removes_both_tables() {
         let fts_count: i64 = conn
             .query_row("SELECT COUNT(1) FROM files_fts;", [], |r| r.get(0))
             .unwrap();
+        drop(conn);
+
         assert_eq!(records_count, 0);
         assert_eq!(fts_count, 0);
     }
@@ -252,7 +260,7 @@ async fn test_pipeline_watcher_event_integration() {
 
     let mut pipeline = IndexPipeline::new(Arc::clone(&conn_arc));
     let mut watcher =
-        FileWatcher::with_debounce(&[root.clone()], Duration::from_millis(50)).unwrap();
+        FileWatcher::with_debounce(std::slice::from_ref(&root), Duration::from_millis(50)).unwrap();
 
     // Create a new file in watched directory
     let live_file = root.join("live_event.md");
@@ -273,6 +281,8 @@ async fn test_pipeline_watcher_event_integration() {
     {
         let conn = conn_arc.lock().unwrap();
         let hits = search_indexed_files(&conn, "inotify", 5).unwrap();
+        drop(conn);
+
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].path, live_file);
     }

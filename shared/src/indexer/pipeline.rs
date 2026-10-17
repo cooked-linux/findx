@@ -249,7 +249,12 @@ impl IndexPipeline {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::significant_drop_tightening
+)]
 mod tests {
     use super::*;
     use crate::db::migrations::apply_migrations;
@@ -288,9 +293,6 @@ mod tests {
             let count_fts: i64 = conn
                 .query_row("SELECT COUNT(1) FROM files_fts;", [], |r| r.get(0))
                 .unwrap();
-            assert_eq!(count_records, 1);
-            assert_eq!(count_fts, 1);
-
             let rowid: i64 = conn
                 .query_row(
                     "SELECT rowid FROM files_fts WHERE files_fts MATCH 'performance';",
@@ -301,6 +303,10 @@ mod tests {
             let rec_id: i64 = conn
                 .query_row("SELECT id FROM file_records;", [], |r| r.get(0))
                 .unwrap();
+            drop(conn);
+
+            assert_eq!(count_records, 1);
+            assert_eq!(count_fts, 1);
             assert_eq!(rowid, rec_id);
         }
 
@@ -322,6 +328,8 @@ mod tests {
             let count_fts: i64 = conn
                 .query_row("SELECT COUNT(1) FROM files_fts;", [], |r| r.get(0))
                 .unwrap();
+            drop(conn);
+
             assert_eq!(count_records, 1);
             assert_eq!(count_fts, 1);
         }
@@ -338,6 +346,8 @@ mod tests {
             let count_fts: i64 = conn
                 .query_row("SELECT COUNT(1) FROM files_fts;", [], |r| r.get(0))
                 .unwrap();
+            drop(conn);
+
             assert_eq!(count_records, 0);
             assert_eq!(count_fts, 0);
         }

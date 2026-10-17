@@ -169,7 +169,12 @@ LIMIT ?4;";
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::significant_drop_tightening
+)]
 mod tests {
     use super::*;
     use crate::db::migrations::apply_migrations;
@@ -223,13 +228,20 @@ mod tests {
         }
 
         pipeline.enqueue_upsert(file1.clone()).unwrap();
-        pipeline.enqueue_upsert(file2.clone()).unwrap();
+        pipeline.enqueue_upsert(file2).unwrap();
         pipeline.enqueue_upsert(file3).unwrap();
         pipeline.flush().unwrap();
 
         let conn = conn_arc.lock().unwrap();
 
         let hits = search_indexed_files(&conn, "search", 10).unwrap();
+        // Test builder
+        let builder_hits = SearchQueryBuilder::new("search")
+            .limit(5)
+            .execute(&conn)
+            .unwrap();
+        drop(conn);
+
         assert_eq!(hits.len(), 2);
 
         // search_engine.rs should have the highest rank score due to filename prefix bonus
@@ -242,11 +254,6 @@ mod tests {
         let snip = hits[0].snippet.as_ref().unwrap();
         assert!(snip.contains("<b>search</b>") || snip.contains("search"));
 
-        // Test builder
-        let builder_hits = SearchQueryBuilder::new("search")
-            .limit(5)
-            .execute(&conn)
-            .unwrap();
         assert_eq!(builder_hits.len(), 2);
     }
 }
