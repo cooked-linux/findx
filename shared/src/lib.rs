@@ -21,10 +21,10 @@ pub use fs::{
 };
 pub use ipc::{
     DEFAULT_TIMEOUT, DeviceEvent, DriveConnectionType, FileManagerClient, FileManagerProxy,
-    GlobalShortcutsClient, GlobalShortcutsProxy, Login1Client, Login1ManagerProxy,
-    MountedVolume, SessionHandle, ShortcutActivation, UDisks2Monitor, file_uri_to_path,
-    get_session_connection, get_system_connection, is_session_bus_available,
-    is_system_bus_available, path_to_file_uri, reset_connections_for_test,
+    GlobalShortcutsClient, GlobalShortcutsProxy, Login1Client, Login1ManagerProxy, MountedVolume,
+    SessionHandle, ShortcutActivation, UDisks2Monitor, file_uri_to_path, get_session_connection,
+    get_system_connection, is_session_bus_available, is_system_bus_available, path_to_file_uri,
+    reset_connections_for_test,
 };
 pub use models::{
     AggregatedSearchResults, BatchOperation, CategorySection, FileItem, FileMetadata, FileTag,

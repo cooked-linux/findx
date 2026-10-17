@@ -39,7 +39,10 @@ pub async fn get_session_connection() -> Result<Connection> {
         Ok(Err(err)) => return Err(SharedError::Ipc(IpcError::Zbus(err))),
         Err(_) => {
             let timeout_ms = u64::try_from(DEFAULT_TIMEOUT.as_millis()).unwrap_or(u64::MAX);
-            return Err(SharedError::Ipc(IpcError::timeout("Connection::session", timeout_ms)));
+            return Err(SharedError::Ipc(IpcError::timeout(
+                "Connection::session",
+                timeout_ms,
+            )));
         }
     };
 
@@ -75,7 +78,10 @@ pub async fn get_system_connection() -> Result<Connection> {
         Ok(Err(err)) => return Err(SharedError::Ipc(IpcError::Zbus(err))),
         Err(_) => {
             let timeout_ms = u64::try_from(DEFAULT_TIMEOUT.as_millis()).unwrap_or(u64::MAX);
-            return Err(SharedError::Ipc(IpcError::timeout("Connection::system", timeout_ms)));
+            return Err(SharedError::Ipc(IpcError::timeout(
+                "Connection::system",
+                timeout_ms,
+            )));
         }
     };
 

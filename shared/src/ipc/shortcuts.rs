@@ -200,7 +200,9 @@ impl GlobalShortcutsClient {
     /// # Errors
     ///
     /// Returns an error if the D-Bus connection or signal stream cannot be initialized.
-    pub async fn listen_activations(&self) -> Result<tokio::sync::mpsc::Receiver<ShortcutActivation>> {
+    pub async fn listen_activations(
+        &self,
+    ) -> Result<tokio::sync::mpsc::Receiver<ShortcutActivation>> {
         let conn = self.get_conn().await?;
         let proxy = GlobalShortcutsProxy::new(&conn).await?;
         let mut stream = proxy.receive_activated().await?;
@@ -231,7 +233,8 @@ mod tests {
 
     #[test]
     fn test_session_handle_methods() {
-        let path = OwnedObjectPath::try_from("/org/freedesktop/portal/desktop/session/1_23/findx").unwrap();
+        let path = OwnedObjectPath::try_from("/org/freedesktop/portal/desktop/session/1_23/findx")
+            .unwrap();
         let handle = SessionHandle::new(path);
         assert_eq!(
             handle.as_str(),

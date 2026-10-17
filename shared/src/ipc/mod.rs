@@ -7,13 +7,15 @@ pub mod shortcuts;
 pub mod udisks;
 
 pub use connection::{
-    DEFAULT_TIMEOUT, get_session_connection, get_system_connection,
-    is_session_bus_available, is_system_bus_available, reset_connections_for_test,
-    set_session_connection_for_test, set_system_connection_for_test,
+    DEFAULT_TIMEOUT, get_session_connection, get_system_connection, is_session_bus_available,
+    is_system_bus_available, reset_connections_for_test, set_session_connection_for_test,
+    set_system_connection_for_test,
 };
 pub use file_manager::{FileManagerClient, FileManagerProxy, file_uri_to_path, path_to_file_uri};
 pub use login::{Login1Client, Login1ManagerProxy};
-pub use shortcuts::{GlobalShortcutsClient, GlobalShortcutsProxy, SessionHandle, ShortcutActivation};
+pub use shortcuts::{
+    GlobalShortcutsClient, GlobalShortcutsProxy, SessionHandle, ShortcutActivation,
+};
 pub use udisks::{DeviceEvent, DriveConnectionType, MountedVolume, UDisks2Monitor};
 
 #[cfg(test)]
@@ -88,8 +90,7 @@ mod tests {
         );
 
         // DeviceEvent validation
-        let add_ev =
-            DeviceEvent::Added("/org/freedesktop/UDisks2/block_devices/sda1".to_string());
+        let add_ev = DeviceEvent::Added("/org/freedesktop/UDisks2/block_devices/sda1".to_string());
         let rem_ev =
             DeviceEvent::Removed("/org/freedesktop/UDisks2/block_devices/sda1".to_string());
         assert_eq!(

@@ -190,16 +190,17 @@ impl UDisks2Monitor {
         let manager = UDisks2ObjectManagerProxy::new(&conn).await?;
         let timeout_ms = u64::try_from(self.timeout.as_millis()).unwrap_or(u64::MAX);
 
-        let managed_objects = match tokio::time::timeout(self.timeout, manager.get_managed_objects()).await {
-            Ok(Ok(objs)) => objs,
-            Ok(Err(err)) => return Err(SharedError::Ipc(IpcError::Zbus(err))),
-            Err(_) => {
-                return Err(SharedError::Ipc(IpcError::timeout(
-                    "UDisks2.GetManagedObjects",
-                    timeout_ms,
-                )));
-            }
-        };
+        let managed_objects =
+            match tokio::time::timeout(self.timeout, manager.get_managed_objects()).await {
+                Ok(Ok(objs)) => objs,
+                Ok(Err(err)) => return Err(SharedError::Ipc(IpcError::Zbus(err))),
+                Err(_) => {
+                    return Err(SharedError::Ipc(IpcError::timeout(
+                        "UDisks2.GetManagedObjects",
+                        timeout_ms,
+                    )));
+                }
+            };
 
         // 1. Index all drives to correlate connection bus and removability
         let mut drives_info: HashMap<String, (DriveConnectionType, bool)> = HashMap::new();
@@ -210,7 +211,10 @@ impl UDisks2Monitor {
                 let ejectable = get_bool_prop(drive_props, "Ejectable");
 
                 let conn_type = DriveConnectionType::from_bus_str(&connection_bus);
-                drives_info.insert(path.as_str().to_string(), (conn_type, removable || ejectable));
+                drives_info.insert(
+                    path.as_str().to_string(),
+                    (conn_type, removable || ejectable),
+                );
             }
         }
 
@@ -238,20 +242,25 @@ impl UDisks2Monitor {
             let label = get_str_prop(block_props, "IdLabel")
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| {
-                    primary_mount
-                        .file_name()
-                        .map_or_else(|| path.as_str().to_string(), |n| n.to_string_lossy().into_owned())
+                    primary_mount.file_name().map_or_else(
+                        || path.as_str().to_string(),
+                        |n| n.to_string_lossy().into_owned(),
+                    )
                 });
 
             let size_bytes = get_u64_prop(block_props, "Size");
 
-            let drive_path = get_object_path_prop(block_props, "Drive")
-                .filter(|s| s != "/");
+            let drive_path = get_object_path_prop(block_props, "Drive").filter(|s| s != "/");
 
-            let (connection_type, is_removable) = drive_path.as_ref().map_or(
-                (DriveConnectionType::Other, false),
-                |dp| drives_info.get(dp).copied().unwrap_or((DriveConnectionType::Other, false)),
-            );
+            let (connection_type, is_removable) =
+                drive_path
+                    .as_ref()
+                    .map_or((DriveConnectionType::Other, false), |dp| {
+                        drives_info
+                            .get(dp)
+                            .copied()
+                            .unwrap_or((DriveConnectionType::Other, false))
+                    });
 
             volumes.push(MountedVolume {
                 id: path.as_str().to_string(),
@@ -402,17 +411,23 @@ fn get_str_prop(props: &HashMap<String, OwnedValue>, key: &str) -> Option<String
 }
 
 fn get_bool_prop(props: &HashMap<String, OwnedValue>, key: &str) -> bool {
-    props.get(key).and_then(|v| match &**v {
-        Value::Bool(b) => Some(*b),
-        _ => None,
-    }).unwrap_or(false)
+    props
+        .get(key)
+        .and_then(|v| match &**v {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        })
+        .unwrap_or(false)
 }
 
 fn get_u64_prop(props: &HashMap<String, OwnedValue>, key: &str) -> u64 {
-    props.get(key).and_then(|v| match &**v {
-        Value::U64(n) => Some(*n),
-        _ => None,
-    }).unwrap_or(0)
+    props
+        .get(key)
+        .and_then(|v| match &**v {
+            Value::U64(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap_or(0)
 }
 
 fn get_object_path_prop(props: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
@@ -462,14 +477,38 @@ mod tests {
 
     #[test]
     fn test_drive_connection_type_parsing() {
-        assert_eq!(DriveConnectionType::from_bus_str("usb"), DriveConnectionType::Usb);
-        assert_eq!(DriveConnectionType::from_bus_str("USB"), DriveConnectionType::Usb);
-        assert_eq!(DriveConnectionType::from_bus_str("sata"), DriveConnectionType::Sata);
-        assert_eq!(DriveConnectionType::from_bus_str("ata"), DriveConnectionType::Sata);
-        assert_eq!(DriveConnectionType::from_bus_str("scsi"), DriveConnectionType::Sata);
-        assert_eq!(DriveConnectionType::from_bus_str("nvme"), DriveConnectionType::Nvme);
-        assert_eq!(DriveConnectionType::from_bus_str("sdio"), DriveConnectionType::Sdio);
-        assert_eq!(DriveConnectionType::from_bus_str("virtual"), DriveConnectionType::Other);
+        assert_eq!(
+            DriveConnectionType::from_bus_str("usb"),
+            DriveConnectionType::Usb
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("USB"),
+            DriveConnectionType::Usb
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("sata"),
+            DriveConnectionType::Sata
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("ata"),
+            DriveConnectionType::Sata
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("scsi"),
+            DriveConnectionType::Sata
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("nvme"),
+            DriveConnectionType::Nvme
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("sdio"),
+            DriveConnectionType::Sdio
+        );
+        assert_eq!(
+            DriveConnectionType::from_bus_str("virtual"),
+            DriveConnectionType::Other
+        );
     }
 
     #[test]

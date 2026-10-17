@@ -125,7 +125,12 @@ impl FileManagerClient {
         let uris_ref: Vec<&str> = uris.iter().map(String::as_str).collect();
         let timeout_ms = u64::try_from(self.timeout.as_millis()).unwrap_or(u64::MAX);
 
-        match tokio::time::timeout(self.timeout, proxy.show_item_properties(&uris_ref, startup_id)).await {
+        match tokio::time::timeout(
+            self.timeout,
+            proxy.show_item_properties(&uris_ref, startup_id),
+        )
+        .await
+        {
             Ok(Ok(())) => Ok(()),
             Ok(Err(err)) => Err(SharedError::Ipc(IpcError::Zbus(err))),
             Err(_) => Err(SharedError::Ipc(IpcError::timeout(
@@ -195,8 +200,12 @@ pub fn file_uri_to_path(uri: &str) -> Result<PathBuf> {
 
     while let Some(b) = chars.next() {
         if b == b'%' {
-            let h1 = chars.next().ok_or_else(|| ModelError::validation("Incomplete percent escape"))?;
-            let h2 = chars.next().ok_or_else(|| ModelError::validation("Incomplete percent escape"))?;
+            let h1 = chars
+                .next()
+                .ok_or_else(|| ModelError::validation("Incomplete percent escape"))?;
+            let h2 = chars
+                .next()
+                .ok_or_else(|| ModelError::validation("Incomplete percent escape"))?;
             let hex_bytes = [h1, h2];
             let hex_str = std::str::from_utf8(&hex_bytes)
                 .map_err(|_| ModelError::validation("Invalid hex in percent escape"))?;
