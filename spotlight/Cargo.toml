@@ -19,3 +19,5 @@ gtk4-layer-shell = "0.4"
 zbus = { version = "5.5", features = ["tokio"] }
 glib = "0.20"
 gdk4 = "0.9"
+tokio-util = "0.7.20"
+async-trait = "0.1.92"
