@@ -28,15 +28,15 @@ fn test_integration_in_memory_initialization_and_migrations() {
     );
 
     let applied = db_unmigrated.migrate().expect("apply migrations");
-    assert_eq!(applied, 1, "exactly 1 initial migration should be applied");
+    assert_eq!(applied, 2, "2 migrations should be applied");
     assert_eq!(
         current_version(&db_unmigrated).expect("check version after migration"),
-        Some(1)
+        Some(2)
     );
 
     // 2. Test standard in-memory initialization (auto-migrated)
     let mut db = Database::open_in_memory().expect("open_in_memory");
-    assert_eq!(current_version(&db).expect("current_version"), Some(1));
+    assert_eq!(current_version(&db).expect("current_version"), Some(2));
 
     // Subsequent migration execution should be idempotent
     let second_pass = db.migrate().expect("idempotent migration");
@@ -60,9 +60,11 @@ fn test_integration_in_memory_initialization_and_migrations() {
 
     // 4. Verify applied migrations log
     let history = list_applied_migrations(&db).expect("list migrations");
-    assert_eq!(history.len(), 1);
+    assert_eq!(history.len(), 2);
     assert_eq!(history[0].0, 1);
+    assert_eq!(history[1].0, 2);
     assert!(!history[0].1.is_empty());
+    assert!(!history[1].1.is_empty());
 }
 
 #[test]

@@ -206,6 +206,6 @@ mod tests {
     fn test_open_in_memory_unmigrated() {
         let mut db = Database::open_in_memory_unmigrated().expect("open unmigrated");
         let applied = db.migrate().expect("migrate");
-        assert_eq!(applied, 1, "first migration should apply 1 version");
+        assert_eq!(applied, 2, "first migration should apply 2 versions");
     }
 }

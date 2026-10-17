@@ -5,6 +5,7 @@ pub mod desktop;
 pub mod errors;
 pub mod frecency;
 pub mod fs;
+pub mod indexer;
 pub mod ipc;
 pub mod models;
 
@@ -29,6 +30,12 @@ pub use fs::{
     parse_trash_info, remove_comment, remove_origin_url, remove_tags, restore_from_trash,
     set_comment, set_origin_url, set_tags, stat_path,
 };
+pub use indexer::{
+    CrawlerConfig, DirectoryCrawler, DiscoveredFile, FileWatcher, FsEvent, IndexPipeline,
+    IndexerError, PipelineOp, SearchHit, SearchQueryBuilder, is_ignored_fs_path,
+    search_indexed_files,
+};
+
 pub use ipc::{
     DEFAULT_TIMEOUT, DeviceEvent, DriveConnectionType, FileManagerClient, FileManagerProxy,
     GlobalShortcutsClient, GlobalShortcutsProxy, Login1Client, Login1ManagerProxy, MountedVolume,
