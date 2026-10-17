@@ -9,6 +9,7 @@ use libadwaita::prelude::*;
 
 use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
+use super::list::HierarchicalListViewWidget;
 use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
 use super::view_mode::ViewMode;
@@ -93,6 +94,8 @@ pub struct FinderWindow {
     pub stack: gtk4::Stack,
     /// Cascading Miller columns container.
     pub column_container: ColumnContainer,
+    /// Hierarchical tabular list view widget.
+    pub list_view: HierarchicalListViewWidget,
     /// Bottom breadcrumbs dock container (28px height).
     pub breadcrumbs_box: gtk4::Box,
     /// Label displaying active path breadcrumbs.
@@ -110,6 +113,7 @@ struct LayoutCompartments {
     main_view_box: gtk4::Box,
     stack: gtk4::Stack,
     column_container: ColumnContainer,
+    list_view: HierarchicalListViewWidget,
     breadcrumbs_box: gtk4::Box,
     breadcrumbs_label: gtk4::Label,
 }
@@ -156,6 +160,7 @@ impl FinderWindow {
             main_view_box: layout.main_view_box,
             stack: layout.stack,
             column_container: layout.column_container,
+            list_view: layout.list_view,
             breadcrumbs_box: layout.breadcrumbs_box,
             breadcrumbs_label: layout.breadcrumbs_label,
             history,
@@ -236,7 +241,7 @@ impl FinderWindow {
             .vexpand(true)
             .build();
 
-        let (stack, column_container) = Self::build_view_stack(initial_path);
+        let (stack, column_container, list_view) = Self::build_view_stack(initial_path);
         main_view_box.append(&stack);
 
         let (breadcrumbs_box, breadcrumbs_label) = Self::build_breadcrumbs_dock(initial_path);
@@ -250,12 +255,15 @@ impl FinderWindow {
             main_view_box,
             stack,
             column_container,
+            list_view,
             breadcrumbs_box,
             breadcrumbs_label,
         }
     }
 
-    fn build_view_stack(initial_path: &Path) -> (gtk4::Stack, ColumnContainer) {
+    fn build_view_stack(
+        initial_path: &Path,
+    ) -> (gtk4::Stack, ColumnContainer, HierarchicalListViewWidget) {
         let stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::Crossfade)
             .hexpand(true)
@@ -263,17 +271,17 @@ impl FinderWindow {
             .build();
 
         let icons_page = Self::build_placeholder_page("Icons View (Placeholder)");
-        let list_page = Self::build_placeholder_page("List View (Placeholder)");
+        let list_view = HierarchicalListViewWidget::new(initial_path);
         let column_container = ColumnContainer::new(initial_path);
 
         stack.add_named(&icons_page, Some(ViewMode::Icons.as_str()));
-        stack.add_named(&list_page, Some(ViewMode::List.as_str()));
+        stack.add_named(&list_view.container, Some(ViewMode::List.as_str()));
         stack.add_named(
             &column_container.scrolled_window,
             Some(ViewMode::Columns.as_str()),
         );
         stack.set_visible_child_name(ViewMode::Columns.as_str());
-        (stack, column_container)
+        (stack, column_container, list_view)
     }
 
     fn build_placeholder_page(text: &'static str) -> gtk4::Box {
@@ -357,6 +365,7 @@ impl FinderWindow {
         let target_buf = target.as_ref().to_path_buf();
         self.history.borrow_mut().navigate_to(&target_buf);
         self.column_container.navigate_root(&target_buf);
+        self.list_view.navigate_root(&target_buf);
         self.sync_path_ui(&target_buf);
     }
 
@@ -365,6 +374,7 @@ impl FinderWindow {
         let prev = self.history.borrow_mut().go_back();
         if let Some(target) = prev {
             self.column_container.navigate_root(&target);
+            self.list_view.navigate_root(&target);
             self.sync_path_ui(&target);
         }
     }
@@ -374,6 +384,7 @@ impl FinderWindow {
         let next = self.history.borrow_mut().go_forward();
         if let Some(target) = next {
             self.column_container.navigate_root(&target);
+            self.list_view.navigate_root(&target);
             self.sync_path_ui(&target);
         }
     }
@@ -430,6 +441,11 @@ impl FinderWindow {
 
         let win = self.clone();
         self.column_container.connect_path_changed(move |path| {
+            win.sync_path_ui(path);
+        });
+
+        let win = self.clone();
+        self.list_view.connect_path_changed(move |path| {
             win.sync_path_ui(path);
         });
     }

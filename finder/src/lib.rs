@@ -12,3 +12,4 @@ pub mod views;
 pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_user_bookmarks};
 pub use error::{FinderError, Result};
 pub use views::columns::{ColumnEntry, ColumnKind, ColumnViewModel};
+pub use views::list::{ExpandedNodesCache, LruWatchPool, TreeListViewModel, TreeNode};

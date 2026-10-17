@@ -1,6 +1,7 @@
 pub mod columns;
 pub mod group_header;
 pub mod header_bar;
+pub mod list;
 pub mod sidebar;
 pub mod theme;
 pub mod view_mode;
@@ -8,6 +9,7 @@ pub mod window;
 
 pub use group_header::{GroupHeaderWidget, GroupToggleCallback};
 pub use header_bar::FinderHeaderBar;
+pub use list::{HierarchicalListViewWidget, ListKeyAction};
 pub use sidebar::SidebarWidget;
 pub use theme::{FINDER_CSS, apply_theme_classes, install_finder_theme};
 pub use view_mode::ViewMode;
