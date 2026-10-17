@@ -31,3 +31,6 @@ pub use window::{
     WIDTH_ANIMATION_DURATION_US, build_footer_hint_box, calculate_target_height,
     calculate_top_margin, ease_out_cubic, init_for_window, interpolate_height, interpolate_width,
 };
+
+#[cfg(test)]
+pub(crate) static GTK_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
