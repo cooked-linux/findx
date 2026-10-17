@@ -269,7 +269,9 @@ fn test_virtualization_threshold_constant() {
 #[test]
 fn test_gtk_widget_auto_fit_and_container() {
     let _lock = GTK_TEST_MUTEX.lock().unwrap();
-    let _ = gtk4::init();
+    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
+        return;
+    }
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
 
