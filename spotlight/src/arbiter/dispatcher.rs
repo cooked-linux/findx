@@ -159,6 +159,15 @@ impl QueryDispatcher {
         )
     }
 
+    /// Creates a [`QueryDispatcher`] along with its paired [`mpsc::UnboundedReceiver`].
+    #[must_use]
+    pub fn new_with_channel(
+        providers: Vec<Arc<dyn SearchProvider>>,
+    ) -> (Self, mpsc::UnboundedReceiver<StreamingUpdate>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self::new(providers, tx), rx)
+    }
+
     /// Creates a new [`QueryDispatcher`] with an explicit tokio runtime handle.
     #[must_use]
     pub fn with_handle(
@@ -239,6 +248,12 @@ impl QueryDispatcher {
         }
 
         query_id
+    }
+
+    /// Dispatches a query change event (convenience alias for [`Self::dispatch`]).
+    #[must_use]
+    pub fn on_query_changed(&self, query: &str) -> u64 {
+        self.dispatch(query)
     }
 
     /// Executes query fan-out directly on the calling task (useful for deterministic tests).
