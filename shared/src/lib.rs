@@ -1,5 +1,6 @@
 //! `shared` crate: Common foundation and shared primitives across `finder` and `spotlight`.
 
+pub mod calc;
 pub mod db;
 pub mod desktop;
 pub mod errors;
@@ -10,6 +11,7 @@ pub mod ipc;
 pub mod models;
 pub mod thumbnail;
 
+pub use calc::{CalcError, CalcResult, Dimension, try_evaluate};
 pub use db::{
     Database, FrecencyAggregate, FrecencyEvent, FtsDocument, FtsQueryBuilder, FtsSearchResult,
     Migration, TagCacheEntry, configure_connection, default_db_path,
