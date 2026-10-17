@@ -31,6 +31,18 @@ pub const ANIMATION_DURATION_MS: i64 = 120;
 /// Default animation duration in microseconds.
 pub const ANIMATION_DURATION_US: i64 = ANIMATION_DURATION_MS * 1000;
 
+/// Expanded width of the Spotlight overlay window in split-pane preview mode in pixels.
+pub const EXPANDED_WIDTH: i32 = 960;
+
+/// Default animation duration for width transitions in milliseconds.
+pub const WIDTH_ANIMATION_DURATION_MS: i64 = 140;
+
+/// Default animation duration for width transitions in microseconds.
+pub const WIDTH_ANIMATION_DURATION_US: i64 = WIDTH_ANIMATION_DURATION_MS * 1000;
+
+/// Fixed width for the left results list in split view mode matching design specs.
+pub const SPLIT_LIST_WIDTH: i32 = 312;
+
 /// Calculates ease-out cubic curve value for progress in range [0.0, 1.0].
 #[must_use]
 pub fn ease_out_cubic(progress: f64) -> f64 {
@@ -51,6 +63,12 @@ pub fn interpolate_height(start: i32, target: i32, progress: f64) -> i32 {
     } else {
         target
     }
+}
+
+/// Interpolates between width `start` and `target` using ease-out cubic interpolation over [0.0, 1.0].
+#[must_use]
+pub fn interpolate_width(start: i32, target: i32, progress: f64) -> i32 {
+    interpolate_height(start, target, progress)
 }
 
 /// Window lifecycle state representing the visible mode of the Spotlight overlay.
@@ -153,7 +171,9 @@ pub fn build_footer_hint_box() -> gtk4::Box {
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use super::preview::PreviewPaneWidget;
 use super::search_bar::{KeyAction, SearchBarWidget};
+use crate::preview::loader::PreviewLoader;
 
 /// Custom floating Spotlight window wrapping GTK4 and Wayland layer-shell.
 #[derive(Debug, Clone)]
@@ -168,6 +188,14 @@ pub struct SpotlightWindow {
     pub search_bar_widget: SearchBarWidget,
     /// Central results and previews box.
     pub content_box: gtk4::Box,
+    /// Horizontal split container for search results and preview pane.
+    pub split_box: gtk4::Box,
+    /// Left results container inside split view.
+    pub results_container: gtk4::Box,
+    /// Right inspector preview pane widget.
+    pub preview_pane: PreviewPaneWidget,
+    /// Preview loader and caching coordinator.
+    pub preview_loader: PreviewLoader,
     /// Bottom shortcut hints footer bar.
     pub footer_hint: gtk4::Box,
     /// Flag indicating whether Wayland Layer-Shell protocol is active.
@@ -176,8 +204,12 @@ pub struct SpotlightWindow {
     state: Rc<Cell<OverlayState>>,
     /// Currently rendered window height.
     current_height: Rc<Cell<i32>>,
+    /// Currently rendered window width.
+    current_width: Rc<Cell<i32>>,
     /// Monotonically increasing generation to cancel stale animation callbacks.
     animation_generation: Rc<Cell<u64>>,
+    /// Monotonically increasing generation to cancel stale width animation callbacks.
+    width_animation_generation: Rc<Cell<u64>>,
     /// Saved XDG activation token for restoring focus on dismissal.
     activation_token: Rc<RefCell<Option<String>>>,
 }
@@ -185,6 +217,7 @@ pub struct SpotlightWindow {
 impl SpotlightWindow {
     /// Constructs a new `SpotlightWindow` with layer-shell or X11 splash fallback.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn new(app: Option<&gtk4::Application>) -> Self {
         let window = app.map_or_else(
             || gtk4::ApplicationWindow::builder().build(),
@@ -204,6 +237,26 @@ impl SpotlightWindow {
         let search_bar = search_bar_widget.container.clone();
 
         let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+
+        let split_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        split_box.add_css_class("split");
+        split_box.set_hexpand(true);
+        split_box.set_vexpand(true);
+
+        let results_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        results_container.add_css_class("list");
+        results_container.add_css_class("split-list");
+        results_container.set_hexpand(true);
+        results_container.set_vexpand(true);
+
+        let preview_pane = PreviewPaneWidget::new();
+        preview_pane.container.set_visible(false);
+
+        split_box.append(&results_container);
+        split_box.append(&preview_pane.container);
+        content_box.append(&split_box);
+
+        let preview_loader = PreviewLoader::new();
 
         let footer_hint = build_footer_hint_box();
         footer_hint.set_visible(false);
@@ -237,9 +290,70 @@ impl SpotlightWindow {
         super::theme::init_theme(&window);
 
         let current_height = Rc::new(Cell::new(INITIAL_HEIGHT));
+        let current_width = Rc::new(Cell::new(INITIAL_WIDTH));
         let animation_generation = Rc::new(Cell::new(0));
+        let width_animation_generation = Rc::new(Cell::new(0));
         let state = Rc::new(Cell::new(OverlayState::Dormant));
         let activation_token = Rc::new(RefCell::new(None));
+
+        // Quick action callbacks from the preview inspector pane
+        preview_pane.connect_reveal(|path| {
+            let path_buf = path.to_path_buf();
+            tokio::spawn(async move {
+                let _ = crate::providers::show_in_file_manager(&path_buf).await;
+            });
+        });
+
+        preview_pane.connect_copy_path(|path| {
+            let _ = crate::providers::copy_file_path_to_clipboard(path);
+        });
+
+        preview_pane.connect_open_terminal(|path| {
+            let _ = crate::providers::open_terminal_at(path);
+        });
+
+        // Window-level key actions for quick actions
+        let window_key_controller = gtk4::EventControllerKey::new();
+        let preview_pane_keys = preview_pane.clone();
+        window_key_controller.connect_key_pressed(move |_, keyval, _keycode, modifier| {
+            let is_ctrl = modifier.contains(gdk4::ModifierType::CONTROL_MASK);
+            let is_shift = modifier.contains(gdk4::ModifierType::SHIFT_MASK);
+            let is_alt = modifier.contains(gdk4::ModifierType::ALT_MASK);
+
+            // Ctrl+Shift+C: Copy path
+            if is_ctrl
+                && is_shift
+                && (keyval == gdk4::Key::C || keyval == gdk4::Key::c)
+                && let Some(path) = preview_pane_keys.current_file_path()
+            {
+                let _ = crate::providers::copy_file_path_to_clipboard(&path);
+                return glib::Propagation::Stop;
+            }
+
+            // Ctrl+Alt+T: Terminal
+            if is_ctrl
+                && is_alt
+                && (keyval == gdk4::Key::T || keyval == gdk4::Key::t)
+                && let Some(path) = preview_pane_keys.current_file_path()
+            {
+                let _ = crate::providers::open_terminal_at(&path);
+                return glib::Propagation::Stop;
+            }
+
+            // Ctrl+Enter or Super/Cmd+Enter: Reveal in file manager
+            if (is_ctrl || modifier.contains(gdk4::ModifierType::SUPER_MASK))
+                && (keyval == gdk4::Key::Return || keyval == gdk4::Key::KP_Enter)
+                && let Some(path) = preview_pane_keys.current_file_path()
+            {
+                tokio::spawn(async move {
+                    let _ = crate::providers::show_in_file_manager(&path).await;
+                });
+                return glib::Propagation::Stop;
+            }
+
+            glib::Propagation::Proceed
+        });
+        window.add_controller(window_key_controller);
 
         // Dismiss when losing focus or clicking outside
         let focus_controller = gtk4::EventControllerFocus::new();
@@ -299,11 +413,17 @@ impl SpotlightWindow {
             search_bar,
             search_bar_widget,
             content_box,
+            split_box,
+            results_container,
+            preview_pane,
+            preview_loader,
             footer_hint,
             is_wayland,
             state,
             current_height,
+            current_width,
             animation_generation,
+            width_animation_generation,
             activation_token,
         }
     }
@@ -332,6 +452,7 @@ impl SpotlightWindow {
         let target_gen = next_gen;
 
         let current_h = Rc::clone(&self.current_height);
+        let current_w = Rc::clone(&self.current_width);
         let generation = Rc::clone(&self.animation_generation);
         let start_time: Rc<Cell<Option<i64>>> = Rc::new(Cell::new(None));
 
@@ -347,8 +468,9 @@ impl SpotlightWindow {
             });
 
             let elapsed = now.saturating_sub(start);
+            let current_width_val = current_w.get();
             if elapsed >= ANIMATION_DURATION_US {
-                win.set_default_size(INITIAL_WIDTH, target_height);
+                win.set_default_size(current_width_val, target_height);
                 current_h.set(target_height);
                 glib::ControlFlow::Break
             } else {
@@ -356,11 +478,116 @@ impl SpotlightWindow {
                 let duration_u32 = u32::try_from(ANIMATION_DURATION_US).unwrap_or(120_000);
                 let progress = f64::from(elapsed_u32) / f64::from(duration_u32);
                 let h = interpolate_height(start_height, target_height, progress);
-                win.set_default_size(INITIAL_WIDTH, h);
+                win.set_default_size(current_width_val, h);
                 current_h.set(h);
                 glib::ControlFlow::Continue
             }
         });
+    }
+
+    /// Returns current rendered window width.
+    #[must_use]
+    pub fn current_width(&self) -> i32 {
+        self.current_width.get()
+    }
+
+    /// Smoothly animates window width to target value using ease-out cubic over 140ms.
+    pub fn animate_to_width(&self, target_width: i32) {
+        let start_width = self.current_width.get();
+        if start_width == target_width {
+            return;
+        }
+
+        let next_gen = self.width_animation_generation.get().wrapping_add(1);
+        self.width_animation_generation.set(next_gen);
+        let target_gen = next_gen;
+
+        let current_w = Rc::clone(&self.current_width);
+        let current_h = Rc::clone(&self.current_height);
+        let generation = Rc::clone(&self.width_animation_generation);
+        let start_time: Rc<Cell<Option<i64>>> = Rc::new(Cell::new(None));
+
+        self.window.add_tick_callback(move |win, frame_clock| {
+            if generation.get() != target_gen {
+                return glib::ControlFlow::Break;
+            }
+
+            let now = frame_clock.frame_time();
+            let start = start_time.get().unwrap_or_else(|| {
+                start_time.set(Some(now));
+                now
+            });
+
+            let elapsed = now.saturating_sub(start);
+            let current_height_val = current_h.get();
+            if elapsed >= WIDTH_ANIMATION_DURATION_US {
+                win.set_default_size(target_width, current_height_val);
+                current_w.set(target_width);
+                glib::ControlFlow::Break
+            } else {
+                let elapsed_u32 = u32::try_from(elapsed).unwrap_or(u32::MAX);
+                let duration_u32 = u32::try_from(WIDTH_ANIMATION_DURATION_US).unwrap_or(140_000);
+                let progress = f64::from(elapsed_u32) / f64::from(duration_u32);
+                let w = interpolate_width(start_width, target_width, progress);
+                win.set_default_size(w, current_height_val);
+                current_w.set(w);
+                glib::ControlFlow::Continue
+            }
+        });
+    }
+
+    /// Smoothly animates window width to split-pane preview mode (960px).
+    pub fn animate_to_split_preview(&self) {
+        let _ = self.set_state(OverlayState::SplitPreview);
+        self.animate_to_width(EXPANDED_WIDTH);
+    }
+
+    /// Smoothly animates window width back to single-column results list mode (680px).
+    pub fn animate_to_results_width(&self) {
+        let _ = self.set_state(OverlayState::ResultsList);
+        self.animate_to_width(INITIAL_WIDTH);
+    }
+
+    /// Toggles between single-column results list and split-pane preview mode.
+    pub fn toggle_quick_look(&self) {
+        if self.state.get() == OverlayState::SplitPreview {
+            self.animate_to_results_width();
+        } else {
+            self.animate_to_split_preview();
+        }
+    }
+
+    /// Triggers fast path and asynchronous preview loading for the specified candidate path.
+    pub fn set_preview_item(&self, path: &std::path::Path, mime_type: Option<&str>) {
+        let (req_id, meta_opt, thumb_cached) =
+            self.preview_loader.start_preview_request(path, mime_type);
+
+        if let Some(meta) = meta_opt {
+            self.preview_pane
+                .set_provisional(&meta, thumb_cached.as_deref());
+        }
+
+        let is_dark = self.is_dark_mode();
+        let loader = self.preview_loader.clone();
+        let pane = self.preview_pane.clone();
+        let path_buf = path.to_path_buf();
+        let mime_owned = mime_type.map(ToString::to_string);
+
+        glib::MainContext::default().spawn_local(async move {
+            if let Some(data) = loader
+                .load_preview_async(req_id, path_buf, mime_owned, is_dark)
+                .await
+                && loader.is_request_active(req_id)
+            {
+                pane.set_preview_data(&data);
+            }
+        });
+    }
+
+    /// Returns `true` if dark mode is active in the desktop style manager.
+    #[must_use]
+    pub fn is_dark_mode(&self) -> bool {
+        libadwaita::StyleManager::default().is_dark()
     }
 
     /// Smoothly animates window height to accommodate search results.
@@ -400,10 +627,22 @@ impl SpotlightWindow {
                 self.content_box.set_visible(false);
                 self.search_bar.remove_css_class("dv");
             }
-            OverlayState::ResultsList | OverlayState::SplitPreview => {
+            OverlayState::ResultsList => {
                 self.footer_hint.set_visible(true);
                 self.content_box.set_visible(true);
                 self.search_bar.add_css_class("dv");
+                self.preview_pane.container.set_visible(false);
+                self.results_container.set_size_request(-1, -1);
+                self.results_container.set_hexpand(true);
+            }
+            OverlayState::SplitPreview => {
+                self.footer_hint.set_visible(true);
+                self.content_box.set_visible(true);
+                self.search_bar.add_css_class("dv");
+                self.preview_pane.container.set_visible(true);
+                self.results_container
+                    .set_size_request(SPLIT_LIST_WIDTH, -1);
+                self.results_container.set_hexpand(false);
             }
         }
     }
@@ -452,6 +691,7 @@ impl SpotlightWindow {
             self.window.set_keyboard_mode(KeyboardMode::None);
         }
         self.animate_to_empty();
+        self.animate_to_width(INITIAL_WIDTH);
         let _ = self.set_state(OverlayState::Dormant);
         self.window.set_visible(false);
     }

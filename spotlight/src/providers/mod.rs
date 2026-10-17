@@ -17,7 +17,7 @@ pub use calc_provider::CalculatorProvider;
 pub use dict_provider::DictionaryProvider;
 pub use file_provider::{
     DEFAULT_FILE_LIMIT, FileSearchProvider, copy_file_path_to_clipboard, hit_to_search_record,
-    open_file, show_in_file_manager,
+    open_file, open_terminal_at, show_in_file_manager,
 };
 pub use system_provider::{
     SYSTEM_COMMANDS, SystemActionProvider, SystemCommand, execute_system_action,

@@ -210,6 +210,26 @@ pub fn copy_file_path_to_clipboard(path: &Path) -> bool {
     })
 }
 
+/// Opens the default terminal emulator directly at the containing directory of `path`.
+///
+/// Returns `true` if a terminal emulator process was successfully spawned.
+#[must_use]
+pub fn open_terminal_at(path: &Path) -> bool {
+    let target_dir = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .map_or_else(|| std::path::PathBuf::from("/"), Path::to_path_buf)
+    };
+
+    crate::providers::find_default_terminal().is_some_and(|term| {
+        std::process::Command::new(term)
+            .current_dir(target_dir)
+            .spawn()
+            .is_ok()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
