@@ -8,6 +8,7 @@ pub mod fs;
 pub mod indexer;
 pub mod ipc;
 pub mod models;
+pub mod thumbnail;
 
 pub use db::{
     Database, FrecencyAggregate, FrecencyEvent, FtsDocument, FtsQueryBuilder, FtsSearchResult,
@@ -47,6 +48,12 @@ pub use models::{
     AggregatedSearchResults, BatchOperation, CategorySection, FileItem, FileMetadata, FileTag,
     MimeCategory, OperationKind, OperationState, ProgressReport, SearchCategory, SearchPayload,
     SearchRecord, TagColor, TransferItem,
+};
+pub use thumbnail::{
+    ThumbnailCache, ThumbnailError, ThumbnailMetadata, ThumbnailMetadataRecord, ThumbnailSize,
+    apply_exif_orientation, canonical_file_uri, compute_thumbnail_hash, generate_thumbnail_image,
+    get_or_generate_thumbnail, read_thumbnail_metadata, write_failed_thumbnail,
+    write_thumbnail_png,
 };
 
 #[must_use]
