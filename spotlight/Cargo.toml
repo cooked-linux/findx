@@ -12,7 +12,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 gtk4 = { version = "0.9", features = ["v4_12"] }
 libadwaita = { version = "0.7", features = ["v1_4"] }
 gtk4-layer-shell = "0.4"

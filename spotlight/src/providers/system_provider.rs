@@ -288,6 +288,9 @@ pub async fn execute_system_action(action_id: &str) -> anyhow::Result<()> {
 #[derive(Debug, Default, Clone)]
 pub struct SystemActionProvider;
 
+/// Type alias matching integration naming.
+pub type SystemActionsProvider = SystemActionProvider;
+
 impl SystemActionProvider {
     /// Creates a new `SystemActionProvider`.
     #[must_use]

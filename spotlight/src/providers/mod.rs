@@ -20,7 +20,8 @@ pub use file_provider::{
     open_file, open_terminal_at, show_in_file_manager,
 };
 pub use system_provider::{
-    SYSTEM_COMMANDS, SystemActionProvider, SystemCommand, execute_system_action,
-    is_destructive_action, match_system_actions, parse_brightness_command, parse_volume_command,
+    SYSTEM_COMMANDS, SystemActionProvider, SystemActionsProvider, SystemCommand,
+    execute_system_action, is_destructive_action, match_system_actions, parse_brightness_command,
+    parse_volume_command,
 };
 pub use web_provider::{SearchEngine, WebSearchProvider, open_browser_url, parse_explicit_prefix};
