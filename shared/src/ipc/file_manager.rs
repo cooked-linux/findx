@@ -78,6 +78,13 @@ impl FileManagerClient {
     ///
     /// Returns an error if D-Bus communication fails or times out.
     pub async fn show_items(&self, uris: &[String], startup_id: &str) -> Result<()> {
+        #[cfg(test)]
+        if self.connection.is_none() {
+            return Err(SharedError::Ipc(IpcError::service_unavailable(
+                "FileManager1 actions are disabled during tests to protect the host machine",
+            )));
+        }
+
         let conn = self.get_conn().await?;
         let proxy = FileManagerProxy::new(&conn).await?;
         let uris_ref: Vec<&str> = uris.iter().map(String::as_str).collect();
@@ -99,6 +106,13 @@ impl FileManagerClient {
     ///
     /// Returns an error if D-Bus communication fails or times out.
     pub async fn show_folders(&self, uris: &[String], startup_id: &str) -> Result<()> {
+        #[cfg(test)]
+        if self.connection.is_none() {
+            return Err(SharedError::Ipc(IpcError::service_unavailable(
+                "FileManager1 actions are disabled during tests to protect the host machine",
+            )));
+        }
+
         let conn = self.get_conn().await?;
         let proxy = FileManagerProxy::new(&conn).await?;
         let uris_ref: Vec<&str> = uris.iter().map(String::as_str).collect();
@@ -120,6 +134,13 @@ impl FileManagerClient {
     ///
     /// Returns an error if D-Bus communication fails or times out.
     pub async fn show_item_properties(&self, uris: &[String], startup_id: &str) -> Result<()> {
+        #[cfg(test)]
+        if self.connection.is_none() {
+            return Err(SharedError::Ipc(IpcError::service_unavailable(
+                "FileManager1 actions are disabled during tests to protect the host machine",
+            )));
+        }
+
         let conn = self.get_conn().await?;
         let proxy = FileManagerProxy::new(&conn).await?;
         let uris_ref: Vec<&str> = uris.iter().map(String::as_str).collect();
