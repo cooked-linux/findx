@@ -124,15 +124,57 @@ pub const FINDER_CSS: &str = r"
 }
 
 /* Path bar / Breadcrumbs Dock (28px height) */
-.finder-breadcrumbs {
+.finder-breadcrumbs, .pb {
     min-height: 28px;
     height: 28px;
     background-color: var(--sb);
     border-top: 1px solid var(--ln);
-    padding: 0 14px;
+    padding: 0 10px;
     color: var(--mu);
     font-size: 12px;
 }
+.breadcrumb-btn {
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: var(--tx);
+    font-size: 12px;
+    font-weight: 500;
+    background-color: transparent;
+    border: 1px solid transparent;
+    transition: background-color 100ms ease, border-color 100ms ease;
+}
+.breadcrumb-btn:hover {
+    background-color: var(--hv);
+    color: var(--tx);
+}
+.breadcrumb-btn.active {
+    font-weight: 600;
+    color: var(--tx);
+}
+.breadcrumb-btn.drop-target {
+    background-color: var(--hv);
+    border-color: var(--ac);
+}
+.breadcrumb-sep {
+    color: var(--mu);
+    font-size: 10px;
+    margin: 0 1px;
+    opacity: 0.7;
+}
+.breadcrumb-popover {
+    padding: 6px;
+}
+.breadcrumb-popover-item {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--tx);
+}
+.breadcrumb-popover-item:hover {
+    background-color: var(--ac);
+    color: #ffffff;
+}
+
 
 /* Sidebar Container (210px default width) */
 .finder-sidebar {
@@ -536,6 +578,9 @@ mod tests {
         assert!(FINDER_CSS.contains(".action-btn"));
         assert!(FINDER_CSS.contains(".finder-search"));
         assert!(FINDER_CSS.contains(".finder-breadcrumbs"));
+        assert!(FINDER_CSS.contains(".pb"));
+        assert!(FINDER_CSS.contains(".breadcrumb-btn"));
+        assert!(FINDER_CSS.contains(".breadcrumb-sep"));
         assert!(FINDER_CSS.contains(".hd"));
         assert!(FINDER_CSS.contains(".r"));
         assert!(FINDER_CSS.contains(".dc"));
