@@ -16,11 +16,18 @@ pub struct Migration {
 }
 
 /// Static registry of ordered schema migrations.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "v1_initial",
-    sql: include_str!("migrations/v1_initial.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "v1_initial",
+        sql: include_str!("migrations/v1_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        description: "v2_file_records",
+        sql: include_str!("migrations/v2_file_records.sql"),
+    },
+];
 
 /// Applies all pending schema migrations sequentially within individual transactions.
 ///
@@ -149,13 +156,15 @@ mod tests {
         assert_eq!(current_version(&conn).expect("current_version"), None);
 
         let applied = apply_migrations(&mut conn).expect("apply_migrations");
-        assert_eq!(applied, 1, "should apply 1 migration");
-        assert_eq!(current_version(&conn).expect("current_version"), Some(1));
+        assert_eq!(applied, 2, "should apply 2 migrations");
+        assert_eq!(current_version(&conn).expect("current_version"), Some(2));
 
         let history = list_applied_migrations(&conn).expect("list_applied_migrations");
-        assert_eq!(history.len(), 1);
+        assert_eq!(history.len(), 2);
         assert_eq!(history[0].0, 1);
+        assert_eq!(history[1].0, 2);
         assert!(!history[0].1.is_empty());
+        assert!(!history[1].1.is_empty());
 
         // Re-applying should be a no-op
         let applied_again = apply_migrations(&mut conn).expect("re-apply");
@@ -172,6 +181,12 @@ mod tests {
             .query_row("SELECT COUNT(1) FROM files_fts;", [], |row| row.get(0))
             .expect("files_fts table query");
         assert_eq!(fts_count, 0);
+
+        // Verify file_records exists
+        let records_count: i64 = conn
+            .query_row("SELECT COUNT(1) FROM file_records;", [], |row| row.get(0))
+            .expect("file_records table query");
+        assert_eq!(records_count, 0);
 
         // Verify frecency_events exists
         let frecency_count: i64 = conn
@@ -205,6 +220,15 @@ mod tests {
             )
             .expect("tag index check");
         assert_eq!(tag_idx, 1);
+
+        let path_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM sqlite_master WHERE type = 'index' AND name = 'idx_file_records_path';",
+                [],
+                |row| row.get(0),
+            )
+            .expect("path index check");
+        assert_eq!(path_idx, 1);
     }
 
     #[test]
