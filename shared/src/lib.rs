@@ -2,6 +2,7 @@
 
 pub mod db;
 pub mod errors;
+pub mod frecency;
 pub mod fs;
 pub mod ipc;
 pub mod models;
@@ -12,6 +13,10 @@ pub use db::{
 };
 
 pub use errors::{DbError, FsError, IpcError, ModelError, Result, SharedError, XattrError};
+pub use frecency::{
+    CompositeScorer, DEFAULT_FRECENCY_WEIGHT, DEFAULT_HALF_LIFE_SECS, EventKind, FrecencyError,
+    FrecencyTracker, RankedCandidate, compute_event_score, rank_and_sort,
+};
 pub use fs::{
     EnhancedStat, InodeKey, TrashInfo, TrashedItem, XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL,
     XATTR_TAGS, clone_file, clone_file_with_progress, empty_trash, get_comment, get_origin_url,
