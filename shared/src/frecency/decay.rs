@@ -90,7 +90,12 @@ pub fn compute_event_score(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::suboptimal_flops
+)]
 mod tests {
     use super::*;
 

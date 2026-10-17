@@ -163,7 +163,13 @@ pub fn rank_and_sort<T>(candidates: &mut [RankedCandidate<T>]) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::assert_is_empty,
+    clippy::suboptimal_flops
+)]
 mod tests {
     use super::*;
 
@@ -248,7 +254,7 @@ mod tests {
     fn test_empty_candidates_slice() {
         let mut empty: Vec<RankedCandidate<&str>> = Vec::new();
         rank_and_sort(&mut empty);
-        assert!(empty.is_empty());
+        assert_eq!(empty.as_slice(), &[]);
     }
 
     #[test]

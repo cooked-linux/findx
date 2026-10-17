@@ -221,7 +221,12 @@ impl FrecencyTracker {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::suboptimal_flops
+)]
 mod tests {
     use super::*;
 
@@ -331,7 +336,8 @@ mod tests {
         let base_score = tracker
             .calculate_score("browser.desktop", now)
             .expect("base score");
-        assert!((boosted_score - (base_score * 1.5)).abs() < 1e-6);
+        let expected_score = base_score * 1.5;
+        assert!((boosted_score - expected_score).abs() < 1e-6);
     }
 
     #[test]

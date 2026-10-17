@@ -5,7 +5,9 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::suboptimal_flops,
+    clippy::assert_is_empty
 )]
 
 use rusqlite::Connection;

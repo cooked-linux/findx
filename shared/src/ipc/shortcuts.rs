@@ -136,6 +136,13 @@ impl GlobalShortcutsClient {
             return Ok(existing.clone());
         }
 
+        #[cfg(test)]
+        if self.connection.is_none() {
+            return Err(SharedError::Ipc(IpcError::service_unavailable(
+                "GlobalShortcuts portal actions are disabled during tests to protect the host machine",
+            )));
+        }
+
         let conn = self.get_conn().await?;
         let proxy = GlobalShortcutsProxy::new(&conn).await?;
         let options: HashMap<&str, Value<'_>> = HashMap::new();
