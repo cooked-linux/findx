@@ -34,3 +34,11 @@ pub use window::{
 
 #[cfg(test)]
 pub(crate) static GTK_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn init_gtk_for_test() -> bool {
+    if !gtk4::is_initialized() && gtk4::init().is_err() {
+        return false;
+    }
+    gtk4::is_initialized_main_thread() && gdk4::Display::default().is_some()
+}

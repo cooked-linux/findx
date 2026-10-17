@@ -675,8 +675,7 @@ mod tests {
         let _lock = super::super::GTK_TEST_MUTEX
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
+        if !super::super::init_gtk_for_test() {
             return;
         }
         let calc_res = CalcResult::Math {
