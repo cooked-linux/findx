@@ -8,9 +8,12 @@ use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
 use super::header_bar::FinderHeaderBar;
+use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
 use super::view_mode::ViewMode;
 use crate::history::NavigationHistory;
+use crate::sidebar::config::SidebarConfig;
+use crate::sidebar::tags::TagFilterEvent;
 
 /// Actions triggered by global window keyboard shortcuts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +26,8 @@ pub enum WindowKeyAction {
     SwitchView(ViewMode),
     /// Focus the header bar search entry (`Ctrl+F`).
     FocusSearch,
+    /// Toggle left sidebar navigation panel visibility (`Ctrl+Alt+S` or `Cmd+Alt+S`).
+    ToggleSidebar,
 }
 
 /// Maps keyboard shortcut combinations to corresponding [`WindowKeyAction`] variants.
@@ -58,6 +63,13 @@ pub fn map_key_to_window_action(
         }
     }
 
+    let super_key = state.contains(gdk4::ModifierType::SUPER_MASK)
+        || state.contains(gdk4::ModifierType::META_MASK);
+
+    if (ctrl || super_key) && alt && (keyval == gdk4::Key::s || keyval == gdk4::Key::S) {
+        return Some(WindowKeyAction::ToggleSidebar);
+    }
+
     None
 }
 
@@ -70,6 +82,8 @@ pub struct FinderWindow {
     pub header_bar: FinderHeaderBar,
     /// Central horizontal split paned dividing sidebar and main content.
     pub paned: gtk4::Paned,
+    /// Left sidebar navigation widget.
+    pub sidebar: SidebarWidget,
     /// Left sidebar container compartment.
     pub sidebar_box: gtk4::Box,
     /// Main directory view compartment.
@@ -88,6 +102,7 @@ pub struct FinderWindow {
 
 struct LayoutCompartments {
     paned: gtk4::Paned,
+    sidebar: SidebarWidget,
     sidebar_box: gtk4::Box,
     main_view_box: gtk4::Box,
     stack: gtk4::Stack,
@@ -132,6 +147,7 @@ impl FinderWindow {
             window,
             header_bar,
             paned: layout.paned,
+            sidebar: layout.sidebar,
             sidebar_box: layout.sidebar_box,
             main_view_box: layout.main_view_box,
             stack: layout.stack,
@@ -176,23 +192,38 @@ impl FinderWindow {
     }
 
     fn build_layout_compartments(initial_path: &Path) -> LayoutCompartments {
+        let cfg = SidebarConfig::load();
+
         let paned = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .hexpand(true)
             .vexpand(true)
-            .position(210)
+            .position(cfg.width)
             .shrink_start_child(false)
             .resize_start_child(false)
             .shrink_end_child(false)
             .resize_end_child(true)
             .build();
 
+        let sidebar = SidebarWidget::new();
+
         let sidebar_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
-            .width_request(210)
+            .width_request(cfg.width)
+            .visible(cfg.is_visible)
             .css_classes(["finder-sidebar"])
             .build();
+        sidebar_box.append(&sidebar.container);
         paned.set_start_child(Some(&sidebar_box));
+
+        paned.connect_position_notify(|p| {
+            let pos = p.position();
+            if pos >= 140 {
+                let mut c = SidebarConfig::load();
+                c.width = pos;
+                let _ = c.save();
+            }
+        });
 
         let main_view_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -209,6 +240,7 @@ impl FinderWindow {
         paned.set_end_child(Some(&main_view_box));
         LayoutCompartments {
             paned,
+            sidebar,
             sidebar_box,
             main_view_box,
             stack,
@@ -278,6 +310,36 @@ impl FinderWindow {
             WindowKeyAction::FocusSearch => {
                 self.header_bar.search_entry.grab_focus();
             }
+            WindowKeyAction::ToggleSidebar => {
+                self.toggle_sidebar();
+            }
+        }
+    }
+
+    /// Toggles the sidebar visibility and persists the state.
+    pub fn toggle_sidebar(&self) {
+        let is_visible = self.sidebar_box.is_visible();
+        let new_visible = !is_visible;
+        self.sidebar_box.set_visible(new_visible);
+
+        let mut cfg = SidebarConfig::load();
+        cfg.is_visible = new_visible;
+        let _ = cfg.save();
+    }
+
+    /// Handles filtering by tag emitted from the sidebar.
+    pub fn handle_tag_filter(&self, event: TagFilterEvent) {
+        match event {
+            TagFilterEvent::Selected { tag_name, color: _ } => {
+                self.header_bar
+                    .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
+                self.breadcrumbs_label
+                    .set_text(&format!("Tags › {tag_name}"));
+            }
+            TagFilterEvent::Cleared => {
+                let curr = self.history.borrow().current_path().to_path_buf();
+                self.sync_path_ui(&curr);
+            }
         }
     }
 
@@ -324,6 +386,7 @@ impl FinderWindow {
         };
         self.header_bar
             .update_history_buttons(can_back, can_forward);
+        self.sidebar.set_active_path(path);
     }
 
     /// Wires header bar button interactions to window handlers.
@@ -341,6 +404,16 @@ impl FinderWindow {
         let win = self.clone();
         self.header_bar.connect_view_mode_changed(move |mode| {
             win.set_view_mode(mode);
+        });
+
+        let win = self.clone();
+        self.sidebar.connect_navigate(move |path| {
+            win.navigate_to(path);
+        });
+
+        let win = self.clone();
+        self.sidebar.connect_tag_filter(move |event| {
+            win.handle_tag_filter(event);
         });
     }
 
@@ -400,6 +473,22 @@ mod tests {
         assert_eq!(
             map_key_to_window_action(gdk4::Key::F, gdk4::ModifierType::CONTROL_MASK),
             Some(WindowKeyAction::FocusSearch)
+        );
+
+        // Toggle Sidebar (Ctrl+Alt+S, Cmd+Alt+S)
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::s,
+                gdk4::ModifierType::CONTROL_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::ToggleSidebar)
+        );
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::S,
+                gdk4::ModifierType::SUPER_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::ToggleSidebar)
         );
 
         // Unhandled key
