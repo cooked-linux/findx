@@ -1,10 +1,12 @@
 //! Spotlight user interface components.
 
+pub mod calc_card;
 pub mod empty_state;
 pub mod search_bar;
 pub mod theme;
 pub mod window;
 
+pub use calc_card::{CalcHeroCardWidget, MathRepresentation};
 pub use empty_state::{EmptyStateSelection, EmptyStateWidget, fetch_suggested_apps};
 pub use search_bar::{KeyAction, SearchBarWidget, compute_ghost_completion, map_key_to_action};
 

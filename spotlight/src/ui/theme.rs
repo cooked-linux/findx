@@ -116,6 +116,34 @@ pub const SPOTLIGHT_CSS: &str = r"
     font-weight: 500;
     color: var(--tx);
 }
+
+/* Calculator & Unit/Currency Conversion Hero Card */
+.card {
+    margin: 12px 14px;
+    padding: 22px 28px;
+    border-radius: 14px;
+    background: var(--card);
+    border: 1px solid var(--dv);
+}
+
+.cx {
+    font-size: 16px;
+    color: var(--mu);
+    margin-bottom: 2px;
+}
+
+.cv {
+    font-size: 68px;
+    font-weight: 300;
+    letter-spacing: -1.5px;
+    line-height: 1.05;
+}
+
+.ck {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mu);
+}
 ";
 
 /// Initializes the global CSS styling provider and connects `StyleManager` theme switching.
@@ -166,5 +194,9 @@ mod tests {
         assert!(SPOTLIGHT_CSS.contains(".dark"));
         assert!(SPOTLIGHT_CSS.contains(".sb"));
         assert!(SPOTLIGHT_CSS.contains(".hint"));
+        assert!(SPOTLIGHT_CSS.contains(".card"));
+        assert!(SPOTLIGHT_CSS.contains(".cx"));
+        assert!(SPOTLIGHT_CSS.contains(".cv"));
+        assert!(SPOTLIGHT_CSS.contains(".ck"));
     }
 }
