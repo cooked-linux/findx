@@ -131,6 +131,8 @@ pub struct FileRowWidget {
     is_selected: Rc<Cell<bool>>,
     activate_cbs: Rc<RefCell<Vec<FileActionCallback>>>,
     reveal_cbs: Rc<RefCell<Vec<FileActionCallback>>>,
+    term_cbs: Rc<RefCell<Vec<FileActionCallback>>>,
+    quick_look_cbs: Rc<RefCell<Vec<FileActionCallback>>>,
 }
 
 impl fmt::Debug for FileRowWidget {
@@ -195,6 +197,8 @@ impl FileRowWidget {
         let is_selected_rc = Rc::new(Cell::new(false));
         let activate_cbs = Rc::new(RefCell::new(Vec::new()));
         let reveal_cbs = Rc::new(RefCell::new(Vec::new()));
+        let term_cbs = Rc::new(RefCell::new(Vec::new()));
+        let quick_look_cbs = Rc::new(RefCell::new(Vec::new()));
 
         let widget = Self {
             container,
@@ -207,6 +211,8 @@ impl FileRowWidget {
             is_selected: is_selected_rc,
             activate_cbs,
             reveal_cbs,
+            term_cbs,
+            quick_look_cbs,
         };
 
         widget.setup_events();
@@ -256,6 +262,18 @@ impl FileRowWidget {
             && (keyval == gdk4::Key::Return || keyval == gdk4::Key::KP_Enter)
         {
             self.reveal();
+            return true;
+        }
+
+        // Ctrl+Alt+T: Open terminal directly at containing directory
+        let is_alt = state.contains(gdk4::ModifierType::ALT_MASK);
+        if is_ctrl && is_alt && (keyval == gdk4::Key::T || keyval == gdk4::Key::t) {
+            return self.open_terminal();
+        }
+
+        // Spacebar: Toggle Quick Look preview expansion
+        if keyval == gdk4::Key::space {
+            self.toggle_quick_look();
             return true;
         }
 
@@ -336,6 +354,38 @@ impl FileRowWidget {
     /// Registers a callback invoked upon file reveal (Ctrl+Enter).
     pub fn connect_reveal<F: Fn(&SearchRecord) + 'static>(&self, callback: F) {
         self.reveal_cbs.borrow_mut().push(Box::new(callback));
+    }
+
+    /// Triggers opening default terminal directly at file's parent directory (Ctrl+Alt+T).
+    #[must_use]
+    pub fn open_terminal(&self) -> bool {
+        let rec = self.record.borrow().clone();
+        let spawned = rec
+            .payload
+            .file_path()
+            .is_some_and(crate::providers::open_terminal_at);
+        for cb in &*self.term_cbs.borrow() {
+            cb(&rec);
+        }
+        spawned
+    }
+
+    /// Triggers toggling the Quick Look preview inspector (Spacebar).
+    pub fn toggle_quick_look(&self) {
+        let rec = self.record.borrow().clone();
+        for cb in &*self.quick_look_cbs.borrow() {
+            cb(&rec);
+        }
+    }
+
+    /// Registers a callback invoked upon terminal activation (Ctrl+Alt+T).
+    pub fn connect_open_terminal<F: Fn(&SearchRecord) + 'static>(&self, callback: F) {
+        self.term_cbs.borrow_mut().push(Box::new(callback));
+    }
+
+    /// Registers a callback invoked upon Quick Look toggling (Spacebar).
+    pub fn connect_quick_look<F: Fn(&SearchRecord) + 'static>(&self, callback: F) {
+        self.quick_look_cbs.borrow_mut().push(Box::new(callback));
     }
 }
 

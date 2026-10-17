@@ -301,6 +301,99 @@ pub const SPOTLIGHT_CSS: &str = r"
 .ic.folder, .file-icon-chip.folder {
     background-image: linear-gradient(160deg, #5ac8fa, #2f8fe0);
 }
+
+/* Split-Pane Preview & Metadata Inspector */
+.split {
+    min-height: 0;
+}
+
+.split .list, .split-list {
+    min-width: 312px;
+}
+
+.pv, .preview-pane {
+    border-left: 1px solid var(--dv);
+    padding: 26px 26px 20px;
+}
+
+.thumb {
+    min-width: 220px;
+    min-height: 158px;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+
+.pn {
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 20px;
+    color: var(--tx);
+}
+
+.pk {
+    font-size: 13px;
+    color: var(--mu);
+    margin-top: 2px;
+}
+
+.meta {
+    margin-top: 18px;
+    border-top: 1px solid var(--dv);
+}
+
+.meta-row {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--dv);
+    font-size: 13px;
+}
+
+.meta-key, .meta span:first-child {
+    color: var(--mu);
+}
+
+.meta-val {
+    color: var(--tx);
+}
+
+.code-preview-scroll {
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--dv);
+    padding: 12px;
+    min-height: 158px;
+}
+
+.code-preview-text {
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--tx);
+}
+
+.code-preview-notice {
+    font-size: 11px;
+    color: var(--mu);
+    padding: 4px 0 0;
+}
+
+.preview-actions-bar {
+    margin-top: 14px;
+}
+
+.preview-action-btn {
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    background: var(--card);
+    border: 1px solid var(--dv);
+    color: var(--tx);
+    transition: background 120ms ease;
+}
+
+.preview-action-btn:hover {
+    background-color: var(--hv);
+}
 ";
 
 /// Initializes the global CSS styling provider and connects `StyleManager` theme switching.
@@ -361,5 +454,11 @@ mod tests {
         assert!(SPOTLIGHT_CSS.contains(".row"));
         assert!(SPOTLIGHT_CSS.contains(".ic"));
         assert!(SPOTLIGHT_CSS.contains(".file-icon-chip"));
+        assert!(SPOTLIGHT_CSS.contains(".split"));
+        assert!(SPOTLIGHT_CSS.contains(".pv"));
+        assert!(SPOTLIGHT_CSS.contains(".thumb"));
+        assert!(SPOTLIGHT_CSS.contains(".pn"));
+        assert!(SPOTLIGHT_CSS.contains(".pk"));
+        assert!(SPOTLIGHT_CSS.contains(".meta"));
     }
 }
