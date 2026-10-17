@@ -9,6 +9,7 @@ pub mod frecency;
 pub mod fs;
 pub mod indexer;
 pub mod ipc;
+pub mod mime;
 pub mod models;
 pub mod thumbnail;
 
@@ -51,6 +52,11 @@ pub use ipc::{
     SessionHandle, ShortcutActivation, UDisks2Monitor, file_uri_to_path, get_session_connection,
     get_system_connection, is_session_bus_available, is_system_bus_available, path_to_file_uri,
     reset_connections_for_test,
+};
+pub use mime::{
+    AppHandlerInfo, MimeAppsConfig, MimeError, detect_mime_from_bytes, detect_mime_type,
+    detect_mime_with_spoof_check, get_default_app_for_mime, get_open_with_candidates,
+    get_open_with_candidates_for_mime, set_default_app, sniff_magic,
 };
 pub use models::{
     AggregatedSearchResults, BatchOperation, CategorySection, FileItem, FileMetadata, FileTag,
