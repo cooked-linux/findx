@@ -148,7 +148,7 @@ fn test_provider_fast_path_and_scope_routing() {
 }
 
 #[test]
-fn test_hero_card_ui_rendering_and_tab_cycling() {
+fn test_hero_card_ui_rendering_and_actions() {
     if gtk4::init().is_ok() {
         let calc = try_evaluate("25 * 4 + 10").expect("evaluation succeeded");
         let card = CalcHeroCardWidget::new(&calc);
@@ -183,33 +183,29 @@ fn test_hero_card_ui_rendering_and_tab_cycling() {
         assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
         assert_eq!(card.value_label.text(), "110");
         assert_eq!(card.current_representation(), MathRepresentation::Decimal);
-    }
-}
 
-#[test]
-fn test_hero_card_clipboard_and_dismissal_actions() {
-    if gtk4::init().is_ok() {
-        let calc = try_evaluate("10 miles in km").expect("evaluation succeeded");
-        let card = CalcHeroCardWidget::new(&calc);
+        // Part 2: Clipboard & dismissal actions
+        let calc_conv = try_evaluate("10 miles in km").expect("evaluation succeeded");
+        let card_conv = CalcHeroCardWidget::new(&calc_conv);
 
-        assert_eq!(card.expr_label.text(), "10 miles");
-        assert_eq!(card.value_label.text(), "16.09 km");
-        assert_eq!(card.kind_label.text(), "Conversion");
+        assert_eq!(card_conv.expr_label.text(), "10 miles");
+        assert_eq!(card_conv.value_label.text(), "16.09 km");
+        assert_eq!(card_conv.kind_label.text(), "Conversion");
 
         let dismissed = Rc::new(Cell::new(false));
         let dismissed_clone = Rc::clone(&dismissed);
-        card.connect_dismiss(move || {
+        card_conv.connect_dismiss(move || {
             dismissed_clone.set(true);
         });
 
         let copied_text = Rc::new(RefCell::new(String::new()));
         let copied_clone = Rc::clone(&copied_text);
-        card.connect_copied(move |text| {
+        card_conv.connect_copied(move |text| {
             *copied_clone.borrow_mut() = text.to_string();
         });
 
         // Test Enter key action
-        assert!(card.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
+        assert!(card_conv.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
         assert!(dismissed.get());
         assert_eq!(*copied_text.borrow(), "16.09 km");
 
@@ -217,7 +213,7 @@ fn test_hero_card_clipboard_and_dismissal_actions() {
         dismissed.set(false);
         *copied_text.borrow_mut() = String::new();
 
-        assert!(card.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
+        assert!(card_conv.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
         assert!(dismissed.get());
         assert_eq!(*copied_text.borrow(), "16.09 km");
     }

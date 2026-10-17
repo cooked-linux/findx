@@ -144,6 +144,67 @@ pub const SPOTLIGHT_CSS: &str = r"
     font-weight: 500;
     color: var(--mu);
 }
+
+/* No Results Fallback View */
+.empty {
+    padding: 34px 20px 22px;
+}
+
+.empty h4, .empty-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--tx);
+}
+
+.empty p, .empty-subtitle {
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: var(--mu);
+}
+
+.no-results-web-card {
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--dv);
+    transition: background 120ms ease;
+}
+
+.no-results-web-card:hover {
+    background-color: var(--hv);
+}
+
+.no-results-web-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--tx);
+}
+
+/* Destructive Action Confirmation Chip */
+.confirm-bar {
+    padding: 8px 14px;
+    background: var(--card);
+    border-radius: 12px;
+    margin: 6px 14px;
+}
+
+.confirm-chip-action {
+    background-color: #e5484d;
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 6px 14px;
+    border: none;
+}
+
+.confirm-chip-cancel {
+    background: transparent;
+    color: var(--mu);
+    border-radius: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--dv);
+}
 ";
 
 /// Initializes the global CSS styling provider and connects `StyleManager` theme switching.
@@ -198,5 +259,7 @@ mod tests {
         assert!(SPOTLIGHT_CSS.contains(".cx"));
         assert!(SPOTLIGHT_CSS.contains(".cv"));
         assert!(SPOTLIGHT_CSS.contains(".ck"));
+        assert!(SPOTLIGHT_CSS.contains(".empty"));
+        assert!(SPOTLIGHT_CSS.contains(".confirm-bar"));
     }
 }
