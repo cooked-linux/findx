@@ -47,7 +47,6 @@ pub const FINDER_CSS: &str = r"
 /* Header Bar (52px height) */
 .finder-headerbar {
     min-height: 52px;
-    height: 52px;
     background-color: var(--sb);
     border-bottom: 1px solid var(--ln);
     padding: 0 14px;
@@ -126,7 +125,6 @@ pub const FINDER_CSS: &str = r"
 /* Path bar / Breadcrumbs Dock (28px height) */
 .finder-breadcrumbs, .pb {
     min-height: 28px;
-    height: 28px;
     background-color: var(--sb);
     border-top: 1px solid var(--ln);
     padding: 0 10px;
@@ -184,7 +182,7 @@ pub const FINDER_CSS: &str = r"
 }
 
 .sd {
-    width: 210px;
+    min-width: 210px;
     background-color: var(--sb);
     border-right: 1px solid var(--ln);
 }
@@ -241,8 +239,6 @@ pub const FINDER_CSS: &str = r"
 .gl {
     min-width: 13px;
     min-height: 13px;
-    width: 13px;
-    height: 13px;
     opacity: 0.75;
 }
 .si.on .gl {
@@ -271,8 +267,6 @@ pub const FINDER_CSS: &str = r"
 .tg {
     min-width: 9px;
     min-height: 9px;
-    width: 9px;
-    height: 9px;
     border-radius: 50%;
     border: none;
     padding: 0;
@@ -292,7 +286,6 @@ pub const FINDER_CSS: &str = r"
 .tg.default { background-color: #98989d; }
 .tags-dots-row {
     padding: 4px 10px 8px 10px;
-    gap: 7px;
 }
 
 /* Drag and Drop Hover Indicators */
@@ -307,7 +300,6 @@ pub const FINDER_CSS: &str = r"
     background-color: var(--sb);
     border-bottom: 1px solid var(--ln);
     color: var(--tx);
-    cursor: pointer;
     transition: background-color 100ms ease;
 }
 .group-header:hover {
@@ -329,7 +321,6 @@ pub const FINDER_CSS: &str = r"
 }
 .hd {
     min-height: 28px;
-    height: 28px;
     background-color: var(--sb);
     border-bottom: 1px solid var(--ln);
     padding: 0 8px;
@@ -357,7 +348,6 @@ pub const FINDER_CSS: &str = r"
 }
 .r {
     min-height: 26px;
-    height: 26px;
     padding: 0 8px;
     border-radius: 6px;
     color: var(--tx);
@@ -391,25 +381,24 @@ pub const FINDER_CSS: &str = r"
 }
 .dc-name {
     min-width: 200px;
-    width: 320px;
 }
 .dc-date {
-    width: 150px;
+    min-width: 150px;
     color: var(--mu);
     font-size: 12px;
 }
 .dc-size {
-    width: 140px;
+    min-width: 140px;
     color: var(--mu);
     font-size: 12px;
 }
 .dc-kind {
-    width: 120px;
+    min-width: 120px;
     color: var(--mu);
     font-size: 12px;
 }
 .dc-tags {
-    width: 80px;
+    min-width: 80px;
 }
 .disclosure-chevron {
     font-size: 11px;
@@ -417,7 +406,6 @@ pub const FINDER_CSS: &str = r"
     min-width: 16px;
     padding: 2px;
     border-radius: 4px;
-    cursor: pointer;
     background-color: transparent;
 }
 .disclosure-chevron:hover {
@@ -441,7 +429,6 @@ pub const FINDER_CSS: &str = r"
 }
 .rw {
     min-height: 26px;
-    height: 26px;
     padding: 0 8px;
     border-radius: 6px;
     color: var(--tx);
@@ -485,9 +472,7 @@ pub const FINDER_CSS: &str = r"
 }
 .column-divider {
     min-width: 5px;
-    width: 5px;
     background-color: transparent;
-    cursor: col-resize;
     transition: background-color 150ms ease;
 }
 .column-divider:hover {
