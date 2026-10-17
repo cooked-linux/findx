@@ -177,6 +177,17 @@ pub fn execute_secondary_action(record: &SearchRecord, window: &SpotlightWindow)
     }
 }
 
+/// Removes all result children from the container while preserving the empty dock widget.
+pub fn clear_results_except_dock(container: &gtk4::Box, empty_dock: &gtk4::Box) {
+    let mut current = container.first_child();
+    while let Some(child) = current {
+        current = child.next_sibling();
+        if child != *empty_dock {
+            container.remove(&child);
+        }
+    }
+}
+
 /// Connects all GTK4 UI presentation events, query dispatcher updates, and keyboard interaction.
 #[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
 pub fn wire_spotlight_application(
@@ -218,11 +229,7 @@ pub fn wire_spotlight_application(
         if trimmed.is_empty() {
             // Show empty state suggested dock
             empty_box.set_visible(true);
-            while let Some(child) = win_query.results_container.first_child() {
-                if child != empty_box {
-                    win_query.results_container.remove(&child);
-                }
-            }
+            clear_results_except_dock(&win_query.results_container, &empty_box);
             records_query.borrow_mut().clear();
             rows_query.borrow_mut().clear();
             sel_query.set(0);
@@ -384,11 +391,7 @@ fn render_search_results(
     empty_dock.set_visible(false);
 
     // Clear previous children except empty_dock
-    while let Some(child) = window.results_container.first_child() {
-        if child != *empty_dock {
-            window.results_container.remove(&child);
-        }
-    }
+    clear_results_except_dock(&window.results_container, empty_dock);
 
     let flat: Vec<SearchRecord> = flatten_records(results).into_iter().cloned().collect();
     (*records_holder.borrow_mut()).clone_from(&flat);

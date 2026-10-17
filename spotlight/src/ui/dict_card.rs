@@ -309,77 +309,79 @@ mod tests {
 
     #[test]
     fn test_dict_card_widget_lifecycle() {
-        if gtk4::init().is_ok() {
-            let card = DictionaryCard::new(
-                "serendipity",
-                Some("/ˌsɛr.ənˈdɪp.ɪ.ti/".to_string()),
-                vec![DefinitionSense::new(
-                    "noun",
-                    "The happy chance of finding something good while looking for something else.",
-                    None,
-                )],
-                vec!["chance".to_string()],
-                None,
-                900.0,
-            );
-
-            let widget = DictCardWidget::new(&card);
-
-            assert_eq!(widget.headword_label.text(), "serendipity");
-            assert_eq!(widget.meta_label.text(), "noun · /ˌsɛr.ənˈdɪp.ɪ.ti/");
-            assert_eq!(
-                widget.body_label.text(),
-                "The happy chance of finding something good while looking for something else."
-            );
-            assert_eq!(widget.footer_label.text(), "Dictionary");
-            assert_eq!(
-                widget.clean_definition(),
-                "The happy chance of finding something good while looking for something else."
-            );
-            assert_eq!(widget.headword_and_ipa(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
-
-            // Test connect_dismiss and connect_copied with Enter
-            let dismissed = Rc::new(Cell::new(false));
-            let dismissed_clone = Rc::clone(&dismissed);
-            widget.connect_dismiss(move || {
-                dismissed_clone.set(true);
-            });
-
-            let copied_text = Rc::new(RefCell::new(String::new()));
-            let copied_clone = Rc::clone(&copied_text);
-            widget.connect_copied(move |text| {
-                *copied_clone.borrow_mut() = text.to_string();
-            });
-
-            // Enter copies clean definition
-            assert!(widget.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
-            assert!(dismissed.get());
-            assert_eq!(
-                *copied_text.borrow(),
-                "The happy chance of finding something good while looking for something else."
-            );
-
-            // Reset and test Ctrl+C copies headword + IPA
-            dismissed.set(false);
-            *copied_text.borrow_mut() = String::new();
-
-            assert!(widget.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
-            assert!(dismissed.get());
-            assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
-
-            // Test set_card update
-            let card_run = DictionaryCard::new(
-                "run",
-                Some("/rʌn/".to_string()),
-                vec![DefinitionSense::new("verb", "Move fast on foot.", None)],
-                vec![],
-                None,
-                450.0,
-            );
-            widget.set_card(&card_run);
-            assert_eq!(widget.headword_label.text(), "run");
-            assert_eq!(widget.meta_label.text(), "verb · /rʌn/");
-            assert_eq!(widget.body_label.text(), "Move fast on foot.");
+        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
+        {
+            return;
         }
+        let card = DictionaryCard::new(
+            "serendipity",
+            Some("/ˌsɛr.ənˈdɪp.ɪ.ti/".to_string()),
+            vec![DefinitionSense::new(
+                "noun",
+                "The happy chance of finding something good while looking for something else.",
+                None,
+            )],
+            vec!["chance".to_string()],
+            None,
+            900.0,
+        );
+
+        let widget = DictCardWidget::new(&card);
+
+        assert_eq!(widget.headword_label.text(), "serendipity");
+        assert_eq!(widget.meta_label.text(), "noun · /ˌsɛr.ənˈdɪp.ɪ.ti/");
+        assert_eq!(
+            widget.body_label.text(),
+            "The happy chance of finding something good while looking for something else."
+        );
+        assert_eq!(widget.footer_label.text(), "Dictionary");
+        assert_eq!(
+            widget.clean_definition(),
+            "The happy chance of finding something good while looking for something else."
+        );
+        assert_eq!(widget.headword_and_ipa(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
+
+        // Test connect_dismiss and connect_copied with Enter
+        let dismissed = Rc::new(Cell::new(false));
+        let dismissed_clone = Rc::clone(&dismissed);
+        widget.connect_dismiss(move || {
+            dismissed_clone.set(true);
+        });
+
+        let copied_text = Rc::new(RefCell::new(String::new()));
+        let copied_clone = Rc::clone(&copied_text);
+        widget.connect_copied(move |text| {
+            *copied_clone.borrow_mut() = text.to_string();
+        });
+
+        // Enter copies clean definition
+        assert!(widget.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
+        assert!(dismissed.get());
+        assert_eq!(
+            *copied_text.borrow(),
+            "The happy chance of finding something good while looking for something else."
+        );
+
+        // Reset and test Ctrl+C copies headword + IPA
+        dismissed.set(false);
+        *copied_text.borrow_mut() = String::new();
+
+        assert!(widget.handle_key_press(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK));
+        assert!(dismissed.get());
+        assert_eq!(*copied_text.borrow(), "serendipity /ˌsɛr.ənˈdɪp.ɪ.ti/");
+
+        // Test set_card update
+        let card_run = DictionaryCard::new(
+            "run",
+            Some("/rʌn/".to_string()),
+            vec![DefinitionSense::new("verb", "Move fast on foot.", None)],
+            vec![],
+            None,
+            450.0,
+        );
+        widget.set_card(&card_run);
+        assert_eq!(widget.headword_label.text(), "run");
+        assert_eq!(widget.meta_label.text(), "verb · /rʌn/");
+        assert_eq!(widget.body_label.text(), "Move fast on foot.");
     }
 }

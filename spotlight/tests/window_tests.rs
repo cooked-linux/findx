@@ -214,3 +214,29 @@ fn test_spotlight_window_lifecycle_if_gtk_available() {
         assert_eq!(window.state(), OverlayState::Dormant);
     }
 }
+
+#[test]
+fn test_clear_results_except_dock() {
+    use gtk4::prelude::*;
+    if gtk4::init().is_ok() {
+        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        let dock = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        let row1 = gtk4::Label::new(Some("row1"));
+        let row2 = gtk4::Label::new(Some("row2"));
+
+        container.append(&dock);
+        container.append(&row1);
+        container.append(&row2);
+
+        spotlight::app::clear_results_except_dock(&container, &dock);
+
+        assert_eq!(
+            container.first_child().as_ref(),
+            Some(dock.upcast_ref::<gtk4::Widget>())
+        );
+        let has_no_sibling = container
+            .first_child()
+            .is_some_and(|c| c.next_sibling().is_none());
+        assert!(has_no_sibling);
+    }
+}

@@ -672,71 +672,73 @@ mod tests {
 
     #[test]
     fn test_calc_hero_card_widget_lifecycle() {
-        if gtk4::init().is_ok() {
-            let calc_res = CalcResult::Math {
-                expression: "25 * 4 + 10".to_string(),
-                result: 110.0,
-                formatted: "110".to_string(),
-            };
-
-            let card = CalcHeroCardWidget::new(&calc_res);
-            assert_eq!(card.expr_label.text(), "25 × 4 + 10");
-            assert_eq!(card.value_label.text(), "110");
-            assert_eq!(card.kind_label.text(), "Calculator");
-            assert_eq!(card.current_formatted_value(), "110");
-
-            // Cycle through representations via Tab simulation
-            assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-            assert_eq!(card.value_label.text(), "0x6E");
-            assert_eq!(
-                card.current_representation(),
-                MathRepresentation::Hexadecimal
-            );
-
-            assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-            assert_eq!(card.value_label.text(), "0b1101110");
-            assert_eq!(card.current_representation(), MathRepresentation::Binary);
-
-            assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-            assert_eq!(card.value_label.text(), "1.1 × 10²");
-            assert_eq!(
-                card.current_representation(),
-                MathRepresentation::Scientific
-            );
-
-            assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
-            assert_eq!(card.value_label.text(), "110");
-            assert_eq!(card.current_representation(), MathRepresentation::Decimal);
-
-            // Update to conversion
-            let conv_res = CalcResult::UnitConversion {
-                source_val: 10.0,
-                source_unit: "mi".to_string(),
-                target_val: 16.09344,
-                target_unit: "km".to_string(),
-                formatted: "16.09344 km".to_string(),
-            };
-            card.set_result(&conv_res);
-            assert_eq!(card.expr_label.text(), "10 miles");
-            assert_eq!(card.value_label.text(), "16.09 km");
-            assert_eq!(card.kind_label.text(), "Conversion");
-
-            // Test dismissal callback on Enter
-            let dismissed = Rc::new(Cell::new(false));
-            let dismissed_clone = Rc::clone(&dismissed);
-            card.connect_dismiss(move || {
-                dismissed_clone.set(true);
-            });
-
-            let copied = Rc::new(RefCell::new(String::new()));
-            let copied_clone = Rc::clone(&copied);
-            card.connect_copied(move |text| {
-                *copied_clone.borrow_mut() = text.to_string();
-            });
-
-            assert!(card.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
-            assert!(dismissed.get());
-            assert_eq!(*copied.borrow(), "16.09 km");
+        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
+        {
+            return;
         }
+        let calc_res = CalcResult::Math {
+            expression: "25 * 4 + 10".to_string(),
+            result: 110.0,
+            formatted: "110".to_string(),
+        };
+
+        let card = CalcHeroCardWidget::new(&calc_res);
+        assert_eq!(card.expr_label.text(), "25 × 4 + 10");
+        assert_eq!(card.value_label.text(), "110");
+        assert_eq!(card.kind_label.text(), "Calculator");
+        assert_eq!(card.current_formatted_value(), "110");
+
+        // Cycle through representations via Tab simulation
+        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+        assert_eq!(card.value_label.text(), "0x6E");
+        assert_eq!(
+            card.current_representation(),
+            MathRepresentation::Hexadecimal
+        );
+
+        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+        assert_eq!(card.value_label.text(), "0b1101110");
+        assert_eq!(card.current_representation(), MathRepresentation::Binary);
+
+        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+        assert_eq!(card.value_label.text(), "1.1 × 10²");
+        assert_eq!(
+            card.current_representation(),
+            MathRepresentation::Scientific
+        );
+
+        assert!(card.handle_key_press(gdk4::Key::Tab, gdk4::ModifierType::empty()));
+        assert_eq!(card.value_label.text(), "110");
+        assert_eq!(card.current_representation(), MathRepresentation::Decimal);
+
+        // Update to conversion
+        let conv_res = CalcResult::UnitConversion {
+            source_val: 10.0,
+            source_unit: "mi".to_string(),
+            target_val: 16.09344,
+            target_unit: "km".to_string(),
+            formatted: "16.09344 km".to_string(),
+        };
+        card.set_result(&conv_res);
+        assert_eq!(card.expr_label.text(), "10 miles");
+        assert_eq!(card.value_label.text(), "16.09 km");
+        assert_eq!(card.kind_label.text(), "Conversion");
+
+        // Test dismissal callback on Enter
+        let dismissed = Rc::new(Cell::new(false));
+        let dismissed_clone = Rc::clone(&dismissed);
+        card.connect_dismiss(move || {
+            dismissed_clone.set(true);
+        });
+
+        let copied = Rc::new(RefCell::new(String::new()));
+        let copied_clone = Rc::clone(&copied);
+        card.connect_copied(move |text| {
+            *copied_clone.borrow_mut() = text.to_string();
+        });
+
+        assert!(card.handle_key_press(gdk4::Key::Return, gdk4::ModifierType::empty()));
+        assert!(dismissed.get());
+        assert_eq!(*copied.borrow(), "16.09 km");
     }
 }
