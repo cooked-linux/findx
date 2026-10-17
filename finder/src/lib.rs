@@ -2,8 +2,10 @@
 
 pub mod bookmarks;
 pub mod error;
+pub mod grouping;
 pub mod history;
 pub mod sidebar;
+pub mod sorting;
 pub mod ui;
 
 pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_user_bookmarks};

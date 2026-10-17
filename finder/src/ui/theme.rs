@@ -257,6 +257,35 @@ pub const FINDER_CSS: &str = r"
 .si.drop-target {
     border-top: 2px solid var(--ac);
 }
+
+/* Sticky Section Group Headers */
+.group-header {
+    padding: 6px 14px;
+    min-height: 28px;
+    background-color: var(--sb);
+    border-bottom: 1px solid var(--ln);
+    color: var(--tx);
+    cursor: pointer;
+    transition: background-color 100ms ease;
+}
+.group-header:hover {
+    background-color: var(--hv);
+}
+.group-chevron {
+    font-size: 11px;
+    color: var(--mu);
+    min-width: 14px;
+}
+.group-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--tx);
+}
+.group-count {
+    font-size: 12px;
+    color: var(--mu);
+    font-weight: 500;
+}
 ";
 
 /// Installs the Finder CSS stylesheet onto the default display.
