@@ -1,11 +1,11 @@
-//! User interface widgets, layouts, and design themes for Finder.
-
+pub mod group_header;
 pub mod header_bar;
 pub mod sidebar;
 pub mod theme;
 pub mod view_mode;
 pub mod window;
 
+pub use group_header::{GroupHeaderWidget, GroupToggleCallback};
 pub use header_bar::FinderHeaderBar;
 pub use sidebar::SidebarWidget;
 pub use theme::{FINDER_CSS, apply_theme_classes, install_finder_theme};

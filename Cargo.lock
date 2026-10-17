@@ -696,11 +696,13 @@ name = "finder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "gdk4",
  "gio",
  "glib",
  "gtk4",
  "libadwaita",
+ "rayon",
  "serde",
  "serde_json",
  "shared",
