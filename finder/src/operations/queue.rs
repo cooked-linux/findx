@@ -327,6 +327,36 @@ impl OperationsQueue {
             .collect()
     }
 
+    /// Returns snapshot records of all actively executing tasks.
+    #[must_use]
+    pub fn active_tasks(&self) -> Vec<ActiveTask> {
+        let guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.active_tasks.values().cloned().collect()
+    }
+
+    /// Returns all operations waiting in the pending queue.
+    #[must_use]
+    pub fn pending_operations(&self) -> Vec<BatchOperation> {
+        let guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.pending_queue.iter().cloned().collect()
+    }
+
+    /// Returns total count of active tasks currently running or paused.
+    #[must_use]
+    pub fn active_count(&self) -> usize {
+        let guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.active_tasks.len()
+    }
+
     /// Subscribes to the broadcast stream of operation lifecycle and progress events.
     #[must_use]
     pub fn subscribe_events(&self) -> Receiver<OperationEvent> {
