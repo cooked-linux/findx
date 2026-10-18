@@ -446,6 +446,13 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::redundant_clone,
+    clippy::assert_is_empty
+)]
 mod tests {
     use super::*;
     use std::fs::File;

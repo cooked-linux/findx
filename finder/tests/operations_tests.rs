@@ -1,4 +1,13 @@
-//! Comprehensive integration tests for FindX Finder batch file operations queue engine.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::doc_markdown,
+    clippy::collapsible_if,
+    clippy::uninlined_format_args,
+    clippy::significant_drop_tightening
+)]
+//! Comprehensive integration tests for `FindX` Finder batch file operations queue engine.
 
 use std::fs::{self, File};
 use std::io::Write;
