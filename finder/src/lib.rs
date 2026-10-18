@@ -7,6 +7,7 @@ pub mod coordinator;
 pub mod error;
 pub mod grouping;
 pub mod history;
+pub mod metadata;
 pub mod operations;
 pub mod quicklook;
 pub mod service;
@@ -21,6 +22,10 @@ pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_use
 pub use breadcrumbs::{BreadcrumbDisplayItem, BreadcrumbLineage, PathSegment, layout_segments};
 pub use coordinator::{NavigationCoordinator, PathChangedCallback, SelectionChangedCallback};
 pub use error::{FinderError, Result};
+pub use metadata::{
+    DeepMetadata, ExtendedAttributesService, MetadataError, MultiSelectionSummary,
+    aggregate_metadata, extract_deep_metadata,
+};
 pub use operations::{
     ActiveTask, BatchOperation, OperationError, OperationEvent, OperationsQueue, ProgressReport,
 };
