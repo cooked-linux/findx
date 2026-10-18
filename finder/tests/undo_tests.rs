@@ -149,9 +149,11 @@ fn test_inode_safety_verification_detects_swapped_file() {
         SystemTime::now(),
     );
 
-    // Simulate external swap: delete dst and recreate it with a new file (different inode)
+    // Simulate external swap: create replacement file first so it gets a distinct inode, then swap
+    let other_file = dir.path().join("other.txt");
+    fs::write(&other_file, "external application replaced this file").unwrap();
     fs::remove_file(&dst).unwrap();
-    fs::write(&dst, "external application replaced this file").unwrap();
+    fs::rename(&other_file, &dst).unwrap();
 
     let mut manager = UndoManager::new();
     manager.record_transaction(tx);
