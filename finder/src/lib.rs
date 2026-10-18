@@ -8,6 +8,7 @@ pub mod error;
 pub mod grouping;
 pub mod history;
 pub mod operations;
+pub mod quicklook;
 pub mod service;
 pub mod sidebar;
 pub mod sorting;
@@ -23,6 +24,7 @@ pub use error::{FinderError, Result};
 pub use operations::{
     ActiveTask, BatchOperation, OperationError, OperationEvent, OperationsQueue, ProgressReport,
 };
+pub use quicklook::{PreviewKind, PreviewPayload, QuickLookEngine, QuickLookError};
 pub use service::{
     DbusServiceHandle, FileManagerAction, FileManagerService, export_file_manager_service,
 };
