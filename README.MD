@@ -89,8 +89,6 @@ Contributions are welcome. If you want to improve Findx, open an issue or submit
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-If you would like, I can also add a LICENSE file with the full MIT text in a follow-up commit.
-
 ## Project Goal
 
 Findx exists to bring the familiar experience of Finder and Spotlight from macOS to Linux, making local file discovery and navigation more efficient and pleasant for Linux users.
