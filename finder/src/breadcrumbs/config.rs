@@ -12,6 +12,12 @@ pub struct FinderPreferences {
     /// Visibility state of the bottom breadcrumbs path bar (`Ctrl+Alt+P`).
     #[serde(default = "default_true")]
     pub pathbar_visible: bool,
+    /// Toggle state for recursive folder size calculation in list view (`Ctrl+J`).
+    #[serde(default)]
+    pub calculate_all_sizes: bool,
+    /// Whether to display floating transfer progress dialog for operations.
+    #[serde(default = "default_true")]
+    pub show_transfer_dialog: bool,
 }
 
 const fn default_true() -> bool {
@@ -22,6 +28,8 @@ impl Default for FinderPreferences {
     fn default() -> Self {
         Self {
             pathbar_visible: true,
+            calculate_all_sizes: false,
+            show_transfer_dialog: true,
         }
     }
 }
@@ -84,10 +92,14 @@ mod tests {
     fn test_finder_preferences_roundtrip() {
         let prefs = FinderPreferences {
             pathbar_visible: false,
+            calculate_all_sizes: true,
+            show_transfer_dialog: false,
         };
         let json = serde_json::to_string(&prefs).unwrap();
         let parsed: FinderPreferences = serde_json::from_str(&json).unwrap();
         assert_eq!(prefs, parsed);
         assert!(!parsed.pathbar_visible);
+        assert!(parsed.calculate_all_sizes);
+        assert!(!parsed.show_transfer_dialog);
     }
 }

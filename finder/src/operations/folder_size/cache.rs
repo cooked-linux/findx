@@ -77,6 +77,22 @@ impl FolderSizeCache {
         Self::from_connection(conn)
     }
 
+    /// Returns a resilient cache instance, attempting persistent storage, in-memory storage,
+    /// or memory fallback without panicking.
+    #[must_use]
+    pub fn fallback_cache() -> Self {
+        Self::new()
+            .or_else(|_| Self::new_in_memory())
+            .unwrap_or_else(|_| {
+                let conn = open_in_memory_db().unwrap_or_else(|_| {
+                    unreachable!("SQLite in-memory open failure is unrecoverable")
+                });
+                Self::from_connection(conn).unwrap_or_else(|_| {
+                    unreachable!("SQLite cache construction failure is unrecoverable")
+                })
+            })
+    }
+
     /// Constructs the two-tier cache from an existing open [`Connection`].
     fn from_connection(conn: Connection) -> Result<Self, FolderSizeError> {
         let capacity = NonZeroUsize::new(DEFAULT_LRU_CAPACITY).unwrap_or(NonZeroUsize::MIN);

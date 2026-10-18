@@ -10,7 +10,7 @@ use std::time::SystemTime;
 use dashmap::{DashMap, DashSet};
 
 use super::cache::FolderSizeCache;
-use super::models::{FolderSizeResult, Priority};
+use super::models::{FolderSizeError, FolderSizeResult, Priority};
 use super::scanner::calculate_folder_size_sync;
 
 /// Default number of concurrent background directory traversal workers.
@@ -68,6 +68,14 @@ pub struct FolderSizeManager {
     results_receiver: async_channel::Receiver<(PathBuf, FolderSizeResult)>,
     in_flight: Arc<DashSet<PathBuf>>,
     cancel_tokens: Arc<DashMap<PathBuf, Arc<AtomicBool>>>,
+}
+
+impl std::fmt::Debug for FolderSizeManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FolderSizeManager")
+            .field("in_flight_count", &self.in_flight.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl FolderSizeManager {
@@ -168,6 +176,23 @@ impl FolderSizeManager {
     #[must_use]
     pub fn default_manager(cache: Arc<FolderSizeCache>) -> Self {
         Self::new(cache, DEFAULT_SCANNER_CONCURRENCY)
+    }
+
+    /// Constructs a manager with default persistent or in-memory cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FolderSizeError`] if cache initialization fails.
+    pub fn default_or_in_memory() -> Result<Self, FolderSizeError> {
+        let cache = FolderSizeCache::new().or_else(|_| FolderSizeCache::new_in_memory())?;
+        Ok(Self::default_manager(Arc::new(cache)))
+    }
+
+    /// Constructs a manager with fallback to resilient cache without panicking.
+    #[must_use]
+    pub fn default_manager_fallback() -> Self {
+        Self::default_or_in_memory()
+            .unwrap_or_else(|_| Self::default_manager(Arc::new(FolderSizeCache::fallback_cache())))
     }
 
     /// Requests calculation of recursive folder size and item count.

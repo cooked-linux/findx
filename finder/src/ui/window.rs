@@ -1,8 +1,8 @@
-//! Main Finder application window shell layout and keyboard shortcut dispatch.
-
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
@@ -10,6 +10,7 @@ use libadwaita::prelude::*;
 use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
 use super::list::HierarchicalListViewWidget;
+use super::operations::{OperationsQueuePopover, TransferProgressDialog};
 use super::path_bar::PathBarWidget;
 use super::sidebar::SidebarWidget;
 use super::theme::{apply_theme_classes, install_finder_theme};
@@ -35,6 +36,24 @@ pub enum WindowKeyAction {
     ToggleSidebar,
     /// Toggle bottom breadcrumbs path bar visibility (`Ctrl+Alt+P` or `Cmd+Alt+P`).
     TogglePathBar,
+    /// Undo last operation (`Ctrl+Z`).
+    Undo,
+    /// Redo last undone operation (`Ctrl+Shift+Z` or `Ctrl+Y`).
+    Redo,
+    /// Copy selected items (`Ctrl+C`).
+    Copy,
+    /// Cut selected items (`Ctrl+X`).
+    Cut,
+    /// Paste items from clipboard (`Ctrl+V`).
+    Paste,
+    /// Duplicate selected items (`Ctrl+D`).
+    Duplicate,
+    /// Move selected items to trash (`Delete` or `BackSpace`).
+    Trash,
+    /// Delete selected items permanently without trash (`Shift+Delete`).
+    PermanentDelete,
+    /// Toggle folder size calculation preference (`Ctrl+J`).
+    ToggleCalculateAllSizes,
 }
 
 /// Maps keyboard shortcut combinations to corresponding [`WindowKeyAction`] variants.
@@ -45,8 +64,9 @@ pub fn map_key_to_window_action(
 ) -> Option<WindowKeyAction> {
     let alt = state.contains(gdk4::ModifierType::ALT_MASK);
     let ctrl = state.contains(gdk4::ModifierType::CONTROL_MASK);
+    let shift = state.contains(gdk4::ModifierType::SHIFT_MASK);
 
-    if alt && !ctrl {
+    if alt && !ctrl && !shift {
         if keyval == gdk4::Key::Left {
             return Some(WindowKeyAction::HistoryBack);
         }
@@ -55,7 +75,15 @@ pub fn map_key_to_window_action(
         }
     }
 
-    if ctrl && !alt {
+    if ctrl && shift && !alt && (keyval == gdk4::Key::z || keyval == gdk4::Key::Z) {
+        return Some(WindowKeyAction::Redo);
+    }
+
+    if shift && !ctrl && !alt && (keyval == gdk4::Key::Delete || keyval == gdk4::Key::KP_Delete) {
+        return Some(WindowKeyAction::PermanentDelete);
+    }
+
+    if ctrl && !alt && !shift {
         if keyval == gdk4::Key::_1 || keyval == gdk4::Key::KP_1 {
             return Some(WindowKeyAction::SwitchView(ViewMode::Icons));
         }
@@ -68,6 +96,37 @@ pub fn map_key_to_window_action(
         if keyval == gdk4::Key::f || keyval == gdk4::Key::F {
             return Some(WindowKeyAction::FocusSearch);
         }
+        if keyval == gdk4::Key::z || keyval == gdk4::Key::Z {
+            return Some(WindowKeyAction::Undo);
+        }
+        if keyval == gdk4::Key::y || keyval == gdk4::Key::Y {
+            return Some(WindowKeyAction::Redo);
+        }
+        if keyval == gdk4::Key::c || keyval == gdk4::Key::C {
+            return Some(WindowKeyAction::Copy);
+        }
+        if keyval == gdk4::Key::x || keyval == gdk4::Key::X {
+            return Some(WindowKeyAction::Cut);
+        }
+        if keyval == gdk4::Key::v || keyval == gdk4::Key::V {
+            return Some(WindowKeyAction::Paste);
+        }
+        if keyval == gdk4::Key::d || keyval == gdk4::Key::D {
+            return Some(WindowKeyAction::Duplicate);
+        }
+        if keyval == gdk4::Key::j || keyval == gdk4::Key::J {
+            return Some(WindowKeyAction::ToggleCalculateAllSizes);
+        }
+    }
+
+    if !ctrl
+        && !alt
+        && !shift
+        && (keyval == gdk4::Key::Delete
+            || keyval == gdk4::Key::KP_Delete
+            || keyval == gdk4::Key::BackSpace)
+    {
+        return Some(WindowKeyAction::Trash);
     }
 
     let super_key = state.contains(gdk4::ModifierType::SUPER_MASK)
@@ -118,6 +177,10 @@ pub struct FinderWindow {
     pub history: Rc<RefCell<NavigationHistory>>,
     /// Current active view mode.
     pub view_mode: Rc<RefCell<ViewMode>>,
+    /// Floating operations queue popover attached to the header bar queue button.
+    pub queue_popover: OperationsQueuePopover,
+    /// Active floating transfer progress dialogs keyed by operation id.
+    pub active_dialogs: Rc<RefCell<HashMap<String, TransferProgressDialog>>>,
 }
 
 struct LayoutCompartments {
@@ -147,13 +210,25 @@ impl FinderWindow {
         app: Option<&gtk4::Application>,
         initial_path: impl AsRef<Path>,
     ) -> Self {
+        let coordinator = Rc::new(NavigationCoordinator::new(initial_path.as_ref()));
+        Self::with_coordinator(app, coordinator)
+    }
+
+    /// Constructs a new [`FinderWindow`] with a pre-configured [`NavigationCoordinator`].
+    #[must_use]
+    pub fn with_coordinator(
+        app: Option<&gtk4::Application>,
+        coordinator: Rc<NavigationCoordinator>,
+    ) -> Self {
         install_finder_theme();
-        let initial_path_buf = initial_path.as_ref().to_path_buf();
+        let initial_path_buf = coordinator.current_path();
 
         let window = Self::build_window(app);
         let header_bar = FinderHeaderBar::new();
 
         let layout = Self::build_layout_compartments(&initial_path_buf);
+        layout.column_container.set_coordinator(&coordinator);
+        layout.list_view.set_coordinator(&coordinator);
 
         let root_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -163,9 +238,12 @@ impl FinderWindow {
         root_box.append(&layout.paned);
         window.set_content(Some(&root_box));
 
-        let coordinator = Rc::new(NavigationCoordinator::new(&initial_path_buf));
         let history = Rc::new(RefCell::new(NavigationHistory::new(&initial_path_buf)));
-        let view_mode = Rc::new(RefCell::new(ViewMode::Columns));
+        let view_mode = Rc::new(RefCell::new(coordinator.view_mode()));
+
+        let queue_popover =
+            OperationsQueuePopover::attach(&header_bar.queue_btn, &coordinator.operations_queue);
+        let active_dialogs = Rc::new(RefCell::new(HashMap::new()));
 
         let finder_win = Self {
             window,
@@ -183,12 +261,15 @@ impl FinderWindow {
             coordinator,
             history,
             view_mode,
+            queue_popover,
+            active_dialogs,
         };
 
         finder_win.sync_path_ui(&initial_path_buf);
         finder_win.wire_coordinator();
         finder_win.wire_signals();
         finder_win.wire_keyboard_shortcuts();
+        finder_win.wire_operations_ui();
 
         finder_win
     }
@@ -346,6 +427,33 @@ impl FinderWindow {
             WindowKeyAction::TogglePathBar => {
                 self.toggle_path_bar();
             }
+            WindowKeyAction::Undo => {
+                let _ = self.coordinator.undo();
+            }
+            WindowKeyAction::Redo => {
+                let _ = self.coordinator.redo();
+            }
+            WindowKeyAction::Copy => {
+                self.coordinator.copy_selection();
+            }
+            WindowKeyAction::Cut => {
+                self.coordinator.cut_selection();
+            }
+            WindowKeyAction::Paste => {
+                self.coordinator.paste_to_current_directory();
+            }
+            WindowKeyAction::Duplicate => {
+                self.coordinator.duplicate_selection();
+            }
+            WindowKeyAction::Trash => {
+                self.coordinator.trash_selection();
+            }
+            WindowKeyAction::PermanentDelete => {
+                self.coordinator.delete_selection_permanently(true);
+            }
+            WindowKeyAction::ToggleCalculateAllSizes => {
+                self.toggle_calculate_all_sizes();
+            }
         }
     }
 
@@ -369,6 +477,15 @@ impl FinderWindow {
         let mut prefs = FinderPreferences::load();
         prefs.pathbar_visible = new_visible;
         let _ = prefs.save();
+    }
+
+    /// Toggles the folder size calculation preference and refreshes the directory view.
+    pub fn toggle_calculate_all_sizes(&self) {
+        let mut prefs = FinderPreferences::load();
+        prefs.calculate_all_sizes = !prefs.calculate_all_sizes;
+        let _ = prefs.save();
+        let curr = self.history.borrow().current_path().to_path_buf();
+        self.list_view.navigate_root(&curr);
     }
 
     /// Handles filtering by tag emitted from the sidebar.
@@ -540,6 +657,93 @@ impl FinderWindow {
 
         self.window.add_controller(controller);
     }
+
+    /// Wires operations progress events to update badge and floating transfer dialogs.
+    fn wire_operations_ui(&self) {
+        let events = self.coordinator.operations_queue.subscribe_events();
+        let queue = Arc::clone(&self.coordinator.operations_queue);
+        let active_dialogs = Rc::clone(&self.active_dialogs);
+        let win_weak = self.window.downgrade();
+
+        glib::spawn_future_local(async move {
+            while let Ok(event) = events.recv().await {
+                let prefs = FinderPreferences::load();
+                if !prefs.show_transfer_dialog {
+                    continue;
+                }
+
+                match event {
+                    crate::operations::OperationEvent::PreflightCompleted {
+                        operation_id,
+                        manifest,
+                    } => {
+                        let active_tasks = queue.active_tasks();
+                        let task = active_tasks
+                            .into_iter()
+                            .find(|t| t.operation_id == operation_id);
+                        let kind = task
+                            .as_ref()
+                            .map_or(shared::models::operation::OperationKind::Copy, |t| t.kind);
+                        let dest_name = task
+                            .as_ref()
+                            .and_then(|t| t.operation.destination.as_ref())
+                            .and_then(|p| p.file_name())
+                            .and_then(|n| n.to_str());
+
+                        let dialog = TransferProgressDialog::new(
+                            &operation_id,
+                            kind,
+                            manifest.total_items,
+                            dest_name,
+                        );
+                        dialog.connect_queue((*queue).clone());
+                        if let Some(parent_win) = win_weak.upgrade() {
+                            dialog.window.set_transient_for(Some(&parent_win));
+                        }
+                        dialog.window.present();
+                        active_dialogs.borrow_mut().insert(operation_id, dialog);
+                    }
+                    crate::operations::OperationEvent::Progress(report) => {
+                        let dialogs = active_dialogs.borrow();
+                        if let Some(dialog) = dialogs.get(&report.operation_id) {
+                            dialog.update_progress(&report);
+                        }
+                    }
+                    crate::operations::OperationEvent::Paused { operation_id } => {
+                        let dialogs = active_dialogs.borrow();
+                        if let Some(dialog) = dialogs.get(&operation_id) {
+                            dialog.set_paused(true);
+                        }
+                    }
+                    crate::operations::OperationEvent::Resumed { operation_id } => {
+                        let dialogs = active_dialogs.borrow();
+                        if let Some(dialog) = dialogs.get(&operation_id) {
+                            dialog.set_paused(false);
+                        }
+                    }
+                    crate::operations::OperationEvent::Completed { operation_id } => {
+                        if let Some(dialog) = active_dialogs.borrow_mut().remove(&operation_id) {
+                            dialog.mark_completed();
+                        }
+                    }
+                    crate::operations::OperationEvent::Failed {
+                        operation_id,
+                        error,
+                    } => {
+                        if let Some(dialog) = active_dialogs.borrow_mut().remove(&operation_id) {
+                            dialog.mark_failed(&error);
+                        }
+                    }
+                    crate::operations::OperationEvent::Cancelled { operation_id } => {
+                        if let Some(dialog) = active_dialogs.borrow_mut().remove(&operation_id) {
+                            dialog.window.close();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
 }
 
 #[cfg(test)]
@@ -547,7 +751,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_map_key_to_window_action() {
+    fn test_map_key_to_window_action_navigation() {
         // Alt + Left -> HistoryBack
         assert_eq!(
             map_key_to_window_action(gdk4::Key::Left, gdk4::ModifierType::ALT_MASK),
@@ -620,6 +824,68 @@ mod tests {
         assert_eq!(
             map_key_to_window_action(gdk4::Key::space, gdk4::ModifierType::empty()),
             None
+        );
+    }
+
+    #[test]
+    fn test_map_key_to_window_action_file_operations() {
+        // Undo (Ctrl+Z)
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::z, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Undo)
+        );
+
+        // Redo (Ctrl+Shift+Z, Ctrl+Y)
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::z,
+                gdk4::ModifierType::CONTROL_MASK | gdk4::ModifierType::SHIFT_MASK
+            ),
+            Some(WindowKeyAction::Redo)
+        );
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::y, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Redo)
+        );
+
+        // Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V), Duplicate (Ctrl+D)
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::c, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Copy)
+        );
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::x, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Cut)
+        );
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::v, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Paste)
+        );
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::d, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::Duplicate)
+        );
+
+        // Trash (Delete, BackSpace)
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::Delete, gdk4::ModifierType::empty()),
+            Some(WindowKeyAction::Trash)
+        );
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::BackSpace, gdk4::ModifierType::empty()),
+            Some(WindowKeyAction::Trash)
+        );
+
+        // Permanent Delete (Shift+Delete)
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::Delete, gdk4::ModifierType::SHIFT_MASK),
+            Some(WindowKeyAction::PermanentDelete)
+        );
+
+        // Toggle Calculate All Sizes (Ctrl+J)
+        assert_eq!(
+            map_key_to_window_action(gdk4::Key::j, gdk4::ModifierType::CONTROL_MASK),
+            Some(WindowKeyAction::ToggleCalculateAllSizes)
         );
     }
 }
