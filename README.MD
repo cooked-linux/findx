@@ -2,6 +2,12 @@
 
 Findx brings the Finder and Spotlight experience from macOS to Linux. It aims to provide a familiar file navigation and search workflow for Linux users while preserving the speed, simplicity, and polish that users expect from macOS productivity tools.
 
+## Why this?
+
+I don't enjoy customizing existing app launchers or bars, I'm lazy I just want something that works, feels modern and provide the essential features.
+If you see a lacking feature don't hesitate to open an issue, even if it's out of scope maybe it's a great idea!
+We could develop a section for optional features.
+
 ## Overview
 
 Findx is a Rust-based project focused on delivering:
