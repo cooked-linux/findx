@@ -270,149 +270,154 @@ fn test_format_modified_time_handling() {
 }
 
 #[test]
-fn test_gtk_progress_dialog_lifecycle_and_updates() {
+#[allow(clippy::too_many_lines)]
+fn test_gtk_operations_ui_components() {
     let _lock = GTK_TEST_MUTEX.lock().unwrap();
     if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
         return;
     }
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
 
-    let dialog = TransferProgressDialog::new(
-        "op-test-lifecycle",
-        OperationKind::Copy,
-        5,
-        Some("Downloads"),
-    );
+    // 1. Progress dialog lifecycle & updates
+    {
+        let dialog = TransferProgressDialog::new(
+            "op-test-lifecycle",
+            OperationKind::Copy,
+            5,
+            Some("Downloads"),
+        );
 
-    assert_eq!(dialog.title_label.text(), "Copying 5 items to 'Downloads'");
-    assert_eq!(dialog.progress_bar.fraction(), 0.0);
+        assert_eq!(dialog.title_label.text(), "Copying 5 items to 'Downloads'");
+        assert_eq!(dialog.progress_bar.fraction(), 0.0);
 
-    // Update progress report
-    let report = ProgressReport::new(
-        "op-test-lifecycle",
-        2,
-        5,
-        500,
-        1000,
-        100.0,
-        Some(5.0),
-        Some(PathBuf::from("file2.txt")),
-    );
-    dialog.update_progress(&report);
+        // Update progress report
+        let report = ProgressReport::new(
+            "op-test-lifecycle",
+            2,
+            5,
+            500,
+            1000,
+            100.0,
+            Some(5.0),
+            Some(PathBuf::from("file2.txt")),
+        );
+        dialog.update_progress(&report);
 
-    assert_eq!(dialog.progress_bar.fraction(), 0.5);
-    assert_eq!(dialog.subtitle_label.text(), "file2.txt");
+        assert_eq!(dialog.progress_bar.fraction(), 0.5);
+        assert_eq!(dialog.subtitle_label.text(), "file2.txt");
 
-    // Pause and resume
-    dialog.set_paused(true);
-    assert!(dialog.metrics_label.text().ends_with("(Paused)"));
-    dialog.set_paused(false);
-    assert!(!dialog.metrics_label.text().ends_with("(Paused)"));
+        // Pause and resume
+        dialog.set_paused(true);
+        assert!(dialog.metrics_label.text().ends_with("(Paused)"));
+        dialog.set_paused(false);
+        assert!(!dialog.metrics_label.text().ends_with("(Paused)"));
 
-    // Complete
-    dialog.mark_completed();
-    assert_eq!(dialog.progress_bar.fraction(), 1.0);
-    assert_eq!(dialog.subtitle_label.text(), "Completed");
-}
-
-#[test]
-fn test_gtk_queue_badge_and_popover_binding() {
-    let _lock = GTK_TEST_MUTEX.lock().unwrap();
-    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
-        return;
+        // Complete
+        dialog.mark_completed();
+        assert_eq!(dialog.progress_bar.fraction(), 1.0);
+        assert_eq!(dialog.subtitle_label.text(), "Completed");
     }
 
-    let btn = gtk4::Button::with_label("Queue");
-    let controller = QueueBadgeController::new(btn.clone());
-    let popover = OperationsQueuePopover::new(&btn);
+    // 2. Queue Badge and Popover binding
+    {
+        let btn = gtk4::Button::with_label("Queue");
+        let controller = QueueBadgeController::new(btn.clone());
+        let popover = OperationsQueuePopover::new(&btn);
 
-    assert!(popover.empty_label.is_visible());
-    assert!(!popover.list_box.is_visible());
-    assert_eq!(controller.current_badge_count(), 0);
+        assert!(popover.empty_label.property::<bool>("visible"));
+        assert!(!popover.list_box.property::<bool>("visible"));
+        assert_eq!(controller.current_badge_count(), 0);
 
-    // Simulate active task
-    controller.update(2);
-    assert_eq!(btn.label().as_deref(), Some("Queue (2)"));
-    assert!(btn.has_css_class("queue-btn-active"));
-    assert_eq!(controller.current_badge_count(), 2);
+        // Simulate active task
+        controller.update(2);
+        assert_eq!(btn.label().as_deref(), Some("Queue (2)"));
+        assert!(btn.has_css_class("queue-btn-active"));
+        assert_eq!(controller.current_badge_count(), 2);
 
-    // Refresh with empty queue
-    let queue = OperationsQueue::default();
-    popover.refresh(&queue);
-    assert!(popover.empty_label.is_visible());
-    assert!(!popover.list_box.is_visible());
+        // Refresh with empty queue
+        let queue = OperationsQueue::default();
+        popover.refresh(&queue);
+        assert!(popover.empty_label.property::<bool>("visible"));
+        assert!(!popover.list_box.property::<bool>("visible"));
 
-    // Enqueue an operation into queue
-    let op = BatchOperation::new(
-        "op-popover-1",
-        OperationKind::Copy,
-        vec![PathBuf::from("/src/test.txt")],
-        Some(PathBuf::from("/dst")),
-    );
-    queue.enqueue_operation(op);
+        // Enqueue an operation into queue with valid temp files
+        let temp_dir = tempfile::tempdir().unwrap();
+        let src_file = temp_dir.path().join("test.txt");
+        std::fs::write(&src_file, b"sample content").unwrap();
+        let dst_dir = temp_dir.path().join("dst");
+        std::fs::create_dir_all(&dst_dir).unwrap();
 
-    popover.refresh(&queue);
-    assert!(!popover.empty_label.is_visible());
-    assert!(popover.list_box.is_visible());
-}
+        let op = BatchOperation::new(
+            "op-popover-1",
+            OperationKind::Copy,
+            vec![src_file],
+            Some(dst_dir),
+        );
+        queue.enqueue_operation(op);
 
-#[test]
-fn test_gtk_conflict_dialog_actions_and_alt_modifier() {
-    let _lock = GTK_TEST_MUTEX.lock().unwrap();
-    if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err()) {
-        return;
+        popover.refresh(&queue);
+        assert!(!popover.empty_label.property::<bool>("visible"));
+        assert!(popover.list_box.property::<bool>("visible"));
+
+        // Detach popover before dropping button
+        popover.unparent();
     }
 
-    // 1. Test Replace action with Apply to All
-    let (tx1, mut rx1) = oneshot::channel();
-    let ctx1 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
-    let dialog1 = ConflictResolutionDialog::new(ctx1, tx1);
+    // 3. Conflict Dialog actions and Alt modifier
+    {
+        // 3.1. Test Replace action with Apply to All
+        let (tx1, mut rx1) = oneshot::channel();
+        let ctx1 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
+        let dialog1 = ConflictResolutionDialog::new(ctx1, tx1);
 
-    dialog1.apply_to_all_check.set_active(true);
-    dialog1.trigger_action(ConflictAction::Replace);
+        dialog1.apply_to_all_check.set_active(true);
+        dialog1.trigger_action(ConflictAction::Replace);
 
-    let res1 = rx1.try_recv().unwrap();
-    assert_eq!(res1.action, ConflictAction::Replace);
-    assert!(res1.apply_to_all);
+        let res1 = rx1.try_recv().unwrap();
+        assert_eq!(res1.action, ConflictAction::Replace);
+        assert!(res1.apply_to_all);
 
-    // 2. Test Alt/Option toggling Stop -> Skip
-    let (tx2, _rx2) = oneshot::channel();
-    let ctx2 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
-    let dialog2 = ConflictResolutionDialog::new(ctx2, tx2);
+        // 3.2. Test Alt/Option toggling Stop -> Skip
+        let (tx2, _rx2) = oneshot::channel();
+        let ctx2 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
+        let dialog2 = ConflictResolutionDialog::new(ctx2, tx2);
 
-    let stop_btn = dialog2.stop_button.as_ref().unwrap();
-    assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
+        let stop_btn = dialog2.stop_button.as_ref().unwrap();
+        assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
 
-    dialog2.set_alt_pressed(true);
-    assert_eq!(stop_btn.label().as_deref(), Some("Skip"));
+        dialog2.set_alt_pressed(true);
+        assert_eq!(stop_btn.label().as_deref(), Some("Skip"));
 
-    dialog2.set_alt_pressed(false);
-    assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
+        dialog2.set_alt_pressed(false);
+        assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
 
-    // 3. Test Directory Collision Merge Action
-    let (tx3, mut rx3) = oneshot::channel();
-    let ctx3 = create_sample_conflict_context(true, RelativeTimeStatus::IncomingNewer);
-    let dialog3 = ConflictResolutionDialog::new(ctx3, tx3);
+        // 3.3. Test Directory Collision Merge Action
+        let (tx3, mut rx3) = oneshot::channel();
+        let ctx3 = create_sample_conflict_context(true, RelativeTimeStatus::IncomingNewer);
+        let dialog3 = ConflictResolutionDialog::new(ctx3, tx3);
 
-    dialog3.trigger_action(ConflictAction::Merge);
-    let res3 = rx3.try_recv().unwrap();
-    assert_eq!(res3.action, ConflictAction::Merge);
-    assert!(!res3.apply_to_all);
+        dialog3.trigger_action(ConflictAction::Merge);
+        let res3 = rx3.try_recv().unwrap();
+        assert_eq!(res3.action, ConflictAction::Merge);
+        assert!(!res3.apply_to_all);
 
-    // 4. Test Skip Action
-    let (tx4, mut rx4) = oneshot::channel();
-    let ctx4 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
-    let dialog4 = ConflictResolutionDialog::new(ctx4, tx4);
+        // 3.4. Test Skip Action
+        let (tx4, mut rx4) = oneshot::channel();
+        let ctx4 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
+        let dialog4 = ConflictResolutionDialog::new(ctx4, tx4);
 
-    dialog4.trigger_action(ConflictAction::Skip);
-    let res4 = rx4.try_recv().unwrap();
-    assert_eq!(res4.action, ConflictAction::Skip);
+        dialog4.trigger_action(ConflictAction::Skip);
+        let res4 = rx4.try_recv().unwrap();
+        assert_eq!(res4.action, ConflictAction::Skip);
 
-    // 5. Test Stop Action
-    let (tx5, mut rx5) = oneshot::channel();
-    let ctx5 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
-    let dialog5 = ConflictResolutionDialog::new(ctx5, tx5);
+        // 3.5. Test Stop Action
+        let (tx5, mut rx5) = oneshot::channel();
+        let ctx5 = create_sample_conflict_context(false, RelativeTimeStatus::IncomingNewer);
+        let dialog5 = ConflictResolutionDialog::new(ctx5, tx5);
 
-    dialog5.trigger_action(ConflictAction::Stop);
-    let res5 = rx5.try_recv().unwrap();
-    assert_eq!(res5.action, ConflictAction::Stop);
+        dialog5.trigger_action(ConflictAction::Stop);
+        let res5 = rx5.try_recv().unwrap();
+        assert_eq!(res5.action, ConflictAction::Stop);
+    }
 }

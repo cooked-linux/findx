@@ -161,6 +161,11 @@ impl OperationsQueuePopover {
         });
     }
 
+    /// Detaches the popover from its parent button.
+    pub fn unparent(&self) {
+        self.popover.unparent();
+    }
+
     /// Re-queries the `OperationsQueue` and rebuilds the popover rows and badge count.
     pub fn refresh(&self, queue: &OperationsQueue) {
         let active = queue.active_tasks();

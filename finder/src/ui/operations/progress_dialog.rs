@@ -354,11 +354,14 @@ impl TransferProgressDialog {
         self.pause_resume_btn.set_sensitive(false);
         self.cancel_btn.set_sensitive(false);
 
-        // Smooth fade out / dismiss after 800ms
-        let win = self.window.clone();
-        glib::timeout_add_local_once(Duration::from_millis(800), move || {
-            win.close();
-        });
+        if self.window.is_visible() {
+            let win = self.window.clone();
+            glib::timeout_add_local_once(Duration::from_millis(800), move || {
+                if win.is_visible() {
+                    win.close();
+                }
+            });
+        }
     }
 
     /// Marks the operation as failed with an error description.
