@@ -533,6 +533,7 @@ pub fn install_finder_theme() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+    crate::ui::operations::install_operations_theme();
 }
 
 /// Applies `.finder-dark` or `.finder-light` classes to the widget based on `is_dark`.
