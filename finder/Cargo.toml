@@ -24,12 +24,17 @@ serde_json = "1.0"
 rayon = "1.10"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 async-channel = "2.5"
-nix = { version = "0.29", features = ["fs", "user", "process"] }
+nix = { version = "0.29", features = ["fs", "user", "process", "resource"] }
 libc = "0.2"
 walkdir = "2.5"
 filetime = "0.2"
 xattr = "1.4"
 uuid = { version = "1.28", features = ["v4", "serde"] }
+rusqlite = { version = "0.33", features = ["bundled"] }
+lru = "0.13"
+parking_lot = "0.12"
+dashmap = "6.2"
+xdg = "2.5"
 
 [dev-dependencies]
 tempfile = "3.17"

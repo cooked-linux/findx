@@ -2,6 +2,7 @@
 
 pub mod conflict;
 pub mod error;
+pub mod folder_size;
 pub mod merge;
 pub mod naming;
 pub mod preflight;
@@ -16,6 +17,10 @@ pub use conflict::{
     ConflictPrompt, ConflictResolution, RelativeTimeStatus, StagedRollback, check_collision,
 };
 pub use error::{OperationError, Result};
+pub use folder_size::{
+    FolderSizeCache, FolderSizeError, FolderSizeManager, FolderSizeResult, FolderSizeWatcher,
+    Priority, calculate_folder_size_sync,
+};
 pub use merge::{MergeSummary, execute_directory_merge};
 pub use naming::{
     generate_unique_name, generate_unique_name_with_case_sensitivity, generate_unique_path,
