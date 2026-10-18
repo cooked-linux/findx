@@ -268,14 +268,20 @@ fn test_percent_decode_helper() {
 fn test_preferences_persistence_roundtrip() {
     let prefs = FinderPreferences {
         pathbar_visible: false,
+        calculate_all_sizes: true,
+        show_transfer_dialog: false,
     };
     let json = serde_json::to_string(&prefs).unwrap();
     let deserialized: FinderPreferences = serde_json::from_str(&json).unwrap();
     assert_eq!(prefs, deserialized);
     assert!(!deserialized.pathbar_visible);
+    assert!(deserialized.calculate_all_sizes);
+    assert!(!deserialized.show_transfer_dialog);
 
     let default_prefs = FinderPreferences::default();
     assert!(default_prefs.pathbar_visible);
+    assert!(!default_prefs.calculate_all_sizes);
+    assert!(default_prefs.show_transfer_dialog);
 }
 
 #[test]

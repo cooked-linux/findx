@@ -6,7 +6,7 @@
 //! expansion caching, and keyboard traversal.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -17,7 +17,10 @@ use shared::models::{FileItem, TagColor};
 use tokio::sync::mpsc;
 
 use super::keyboard::{ListKeyAction, attach_list_keyboard_controller};
+use crate::breadcrumbs::FinderPreferences;
+use crate::coordinator::NavigationCoordinator;
 use crate::grouping::kind::classify_kind;
+use crate::operations::Priority;
 use crate::sorting::comparator::{SortColumn, SortCriteria, SortDirection};
 use crate::ui::columns::{format_byte_size, format_system_time};
 use crate::views::list::{
@@ -54,6 +57,8 @@ struct ListViewInner {
     size_header_btn: gtk4::Button,
     kind_header_btn: gtk4::Button,
     tags_header_btn: gtk4::Button,
+    coordinator: RefCell<Option<Rc<NavigationCoordinator>>>,
+    size_labels: RefCell<HashMap<PathBuf, gtk4::Label>>,
 }
 
 impl fmt::Debug for ListViewInner {
@@ -131,6 +136,8 @@ impl HierarchicalListViewWidget {
             size_header_btn: size_btn,
             kind_header_btn: kind_btn,
             tags_header_btn: tags_btn,
+            coordinator: RefCell::new(None),
+            size_labels: RefCell::new(HashMap::new()),
         });
 
         let widget = Self {
@@ -444,7 +451,23 @@ impl HierarchicalListViewWidget {
         }
     }
 
+    /// Attaches a [`NavigationCoordinator`] to handle folder size calculations, context menus, and drag-and-drop.
+    pub fn set_coordinator(&self, coordinator: &Rc<NavigationCoordinator>) {
+        *self.inner.coordinator.borrow_mut() = Some(Rc::clone(coordinator));
+
+        let this = self.clone();
+        coordinator
+            .folder_size_manager
+            .attach_glib_dispatcher(move |path, result| {
+                let labels = this.inner.size_labels.borrow();
+                if let Some(lbl) = labels.get(&path) {
+                    lbl.set_label(&result.formatted_summary());
+                }
+            });
+    }
+
     fn clear_list_rows(&self) {
+        self.inner.size_labels.borrow_mut().clear();
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
@@ -477,6 +500,18 @@ impl HierarchicalListViewWidget {
     fn create_row_widget(&self, node: &TreeNode) -> gtk4::ListBoxRow {
         let row = gtk4::ListBoxRow::builder().css_classes(["r"]).build();
 
+        if let Some(coord) = self.inner.coordinator.borrow().clone() {
+            crate::ui::context_menu::attach_row_context_menu(
+                &row,
+                &node.path,
+                node.is_directory,
+                &coord,
+            );
+            if node.is_directory {
+                crate::ui::context_menu::attach_directory_drop_target(&row, &node.path, &coord);
+            }
+        }
+
         let hbox = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .spacing(0)
@@ -492,7 +527,7 @@ impl HierarchicalListViewWidget {
         hbox.append(&date_cell);
 
         // 3. Size Column (140px)
-        let size_cell = Self::create_size_cell(node);
+        let size_cell = self.create_size_cell(node);
         hbox.append(&size_cell);
 
         // 4. Kind Column (120px)
@@ -599,7 +634,7 @@ impl HierarchicalListViewWidget {
         cell
     }
 
-    fn create_size_cell(node: &TreeNode) -> gtk4::Box {
+    fn create_size_cell(&self, node: &TreeNode) -> gtk4::Box {
         let cell = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .width_request(COL_WIDTH_SIZE)
@@ -607,28 +642,47 @@ impl HierarchicalListViewWidget {
             .halign(gtk4::Align::Start)
             .build();
 
-        let size_str = if node.is_directory {
-            if !node.children.is_empty() {
-                let count = node.children.len();
-                if count == 1 {
-                    "1 item".to_string()
-                } else {
-                    format!("{count} items")
-                }
-            } else if node.item.metadata.size_bytes > 0 {
-                format_byte_size(node.item.metadata.size_bytes)
-            } else {
-                "—".to_string()
-            }
-        } else {
-            format_byte_size(node.item.metadata.size_bytes)
-        };
-
         let label = gtk4::Label::builder()
-            .label(&size_str)
             .halign(gtk4::Align::Start)
             .ellipsize(gtk4::pango::EllipsizeMode::End)
             .build();
+
+        if node.is_directory {
+            let prefs = FinderPreferences::load();
+            if prefs.calculate_all_sizes {
+                let coord_opt = self.inner.coordinator.borrow().clone();
+                if let Some(coord) = coord_opt {
+                    if let Some(cached) = coord
+                        .folder_size_manager
+                        .request_folder_size(&node.path, Priority::High)
+                    {
+                        label.set_label(&cached.formatted_summary());
+                    } else {
+                        label.set_label("--");
+                        self.inner
+                            .size_labels
+                            .borrow_mut()
+                            .insert(node.path.clone(), label.clone());
+                    }
+                } else {
+                    label.set_label("--");
+                }
+            } else if !node.children.is_empty() {
+                let count = node.children.len();
+                if count == 1 {
+                    label.set_label("1 item");
+                } else {
+                    label.set_label(&format!("{count} items"));
+                }
+            } else if node.item.metadata.size_bytes > 0 {
+                label.set_label(&format_byte_size(node.item.metadata.size_bytes));
+            } else {
+                label.set_label("—");
+            }
+        } else {
+            label.set_label(&format_byte_size(node.item.metadata.size_bytes));
+        }
+
         cell.append(&label);
         cell
     }

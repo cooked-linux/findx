@@ -1,11 +1,10 @@
-//! Column list widget representing an individual directory column in Miller Columns.
-
 use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 
+use crate::coordinator::NavigationCoordinator;
 use crate::views::columns::models::{
     ColumnEntry, ColumnKind, ColumnViewModel, DEFAULT_COLUMN_WIDTH, MAX_COLUMN_WIDTH,
     MIN_COLUMN_WIDTH,
@@ -22,6 +21,7 @@ struct ColumnListInner {
     is_ancestor: Cell<bool>,
     on_select: RefCell<Option<ItemSelectedCallback>>,
     on_activate: RefCell<Option<ItemActivatedCallback>>,
+    coordinator: RefCell<Option<Rc<NavigationCoordinator>>>,
 }
 
 impl fmt::Debug for ColumnListInner {
@@ -71,6 +71,7 @@ impl ColumnListWidget {
             is_ancestor: Cell::new(false),
             on_select: RefCell::new(None),
             on_activate: RefCell::new(None),
+            coordinator: RefCell::new(None),
         });
 
         let widget = Self {
@@ -83,6 +84,12 @@ impl ColumnListWidget {
         widget.wire_signals();
 
         widget
+    }
+
+    /// Attaches a [`NavigationCoordinator`] to handle context menus and drag-and-drop on rows.
+    pub fn set_coordinator(&self, coordinator: &Rc<NavigationCoordinator>) {
+        *self.inner.coordinator.borrow_mut() = Some(Rc::clone(coordinator));
+        self.populate_rows();
     }
 
     /// Returns the zero-based index of this column in the horizontal stack.
@@ -251,7 +258,7 @@ impl ColumnListWidget {
         }
 
         for entry in entries {
-            let row = Self::create_row(entry);
+            let row = self.create_row(entry);
             self.list_box.append(&row);
         }
     }
@@ -286,12 +293,24 @@ impl ColumnListWidget {
         self.list_box.append(&empty_box);
     }
 
-    fn create_row(entry: &ColumnEntry) -> gtk4::ListBoxRow {
+    fn create_row(&self, entry: &ColumnEntry) -> gtk4::ListBoxRow {
         let row = gtk4::ListBoxRow::builder()
             .css_classes(["rw"])
             .activatable(true)
             .selectable(true)
             .build();
+
+        if let Some(coord) = self.inner.coordinator.borrow().clone() {
+            crate::ui::context_menu::attach_row_context_menu(
+                &row,
+                entry.path(),
+                entry.is_dir(),
+                &coord,
+            );
+            if entry.is_dir() {
+                crate::ui::context_menu::attach_directory_drop_target(&row, entry.path(), &coord);
+            }
+        }
 
         let hbox = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)

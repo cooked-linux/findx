@@ -4,13 +4,20 @@ use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use gtk4::prelude::*;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use crate::coordinator::NavigationCoordinator;
+use crate::operations::OperationsQueue;
+use crate::operations::folder_size::FolderSizeManager;
 use crate::service::{DbusServiceHandle, FileManagerAction, export_file_manager_service};
 use crate::ui::FinderWindow;
+use crate::undo::{
+    UndoManager, connect_to_queue, default_journal_path, load_journal, save_journal,
+};
 
 /// Well-known application ID for the Finder desktop shell.
 pub const FINDER_APP_ID: &str = "org.freedesktop.findx.Finder";
@@ -83,6 +90,12 @@ pub struct FinderApp {
     pub app: libadwaita::Application,
     /// Active top-level Finder windows.
     pub windows: Rc<RefCell<Vec<FinderWindow>>>,
+    /// Shared background file operations queue engine.
+    pub operations_queue: Arc<OperationsQueue>,
+    /// Shared multi-level transactional undo/redo manager.
+    pub undo_manager: Arc<Mutex<UndoManager>>,
+    /// Shared asynchronous folder size calculation engine.
+    pub folder_size_manager: Arc<FolderSizeManager>,
     action_tx: mpsc::UnboundedSender<FileManagerAction>,
     dbus_handle: Rc<RefCell<Option<DbusServiceHandle>>>,
 }
@@ -106,27 +119,78 @@ impl FinderApp {
         let windows: Rc<RefCell<Vec<FinderWindow>>> = Rc::new(RefCell::new(Vec::new()));
         let dbus_handle = Rc::new(RefCell::new(None));
 
+        // Load persistent undo journal if available, falling back to clean manager
+        let journal_path = default_journal_path();
+        let undo_manager = Arc::new(Mutex::new(
+            load_journal(&journal_path, 50).unwrap_or_else(|_| UndoManager::new()),
+        ));
+
+        let operations_queue = Arc::new(OperationsQueue::new(2));
+        connect_to_queue(&operations_queue, Arc::clone(&undo_manager));
+
+        let folder_size_manager = Arc::new(FolderSizeManager::default_manager_fallback());
+
         app.connect_startup(|_| {
             crate::ui::theme::install_finder_theme();
         });
 
-        Self::wire_command_line_and_activate(&app, &windows);
-        Self::wire_dbus_actions(&app, &windows, action_rx);
+        Self::wire_command_line_and_activate(
+            &app,
+            &windows,
+            &operations_queue,
+            &undo_manager,
+            &folder_size_manager,
+        );
+        Self::wire_dbus_actions(
+            &app,
+            &windows,
+            action_rx,
+            &operations_queue,
+            &undo_manager,
+            &folder_size_manager,
+        );
         Self::wire_shutdown_signals(&app);
+        Self::wire_shutdown_lifecycle(&app, &operations_queue, &undo_manager);
 
         Self {
             app,
             windows,
+            operations_queue,
+            undo_manager,
+            folder_size_manager,
             action_tx,
             dbus_handle,
         }
     }
 
+    fn create_window(
+        app: &libadwaita::Application,
+        target_dir: &Path,
+        operations_queue: &Arc<OperationsQueue>,
+        undo_manager: &Arc<Mutex<UndoManager>>,
+        folder_size_manager: &Arc<FolderSizeManager>,
+    ) -> FinderWindow {
+        let coordinator = Rc::new(NavigationCoordinator::with_managers(
+            target_dir,
+            Arc::clone(operations_queue),
+            Arc::clone(undo_manager),
+            Arc::clone(folder_size_manager),
+        ));
+        FinderWindow::with_coordinator(Some(app.upcast_ref()), coordinator)
+    }
+
     fn wire_command_line_and_activate(
         app: &libadwaita::Application,
         windows: &Rc<RefCell<Vec<FinderWindow>>>,
+        operations_queue: &Arc<OperationsQueue>,
+        undo_manager: &Arc<Mutex<UndoManager>>,
+        folder_size_manager: &Arc<FolderSizeManager>,
     ) {
         let wins_cmd = Rc::clone(windows);
+        let queue_cmd = Arc::clone(operations_queue);
+        let undo_cmd = Arc::clone(undo_manager);
+        let size_cmd = Arc::clone(folder_size_manager);
+
         app.connect_command_line(move |app, cmdline| {
             let args = cmdline.arguments();
             let parsed = FinderCliArgs::parse(&args);
@@ -143,7 +207,7 @@ impl FinderApp {
             wins.retain(|w| w.window.is_visible());
 
             if parsed.new_window || wins.is_empty() {
-                let win = FinderWindow::with_initial_path(Some(app.upcast_ref()), &target_dir);
+                let win = Self::create_window(app, &target_dir, &queue_cmd, &undo_cmd, &size_cmd);
                 win.present();
                 wins.push(win);
             } else if let Some(last_win) = wins.last() {
@@ -155,6 +219,10 @@ impl FinderApp {
         });
 
         let wins_act = Rc::clone(windows);
+        let queue_act = Arc::clone(operations_queue);
+        let undo_act = Arc::clone(undo_manager);
+        let size_act = Arc::clone(folder_size_manager);
+
         app.connect_activate(move |app| {
             let mut wins = wins_act.borrow_mut();
             wins.retain(|w| w.window.is_visible());
@@ -164,7 +232,7 @@ impl FinderApp {
             } else {
                 let default_path =
                     std::env::var("HOME").map_or_else(|_| PathBuf::from("/"), PathBuf::from);
-                let win = FinderWindow::with_initial_path(Some(app.upcast_ref()), &default_path);
+                let win = Self::create_window(app, &default_path, &queue_act, &undo_act, &size_act);
                 win.present();
                 wins.push(win);
             }
@@ -175,9 +243,15 @@ impl FinderApp {
         app: &libadwaita::Application,
         windows: &Rc<RefCell<Vec<FinderWindow>>>,
         mut action_rx: mpsc::UnboundedReceiver<FileManagerAction>,
+        operations_queue: &Arc<OperationsQueue>,
+        undo_manager: &Arc<Mutex<UndoManager>>,
+        folder_size_manager: &Arc<FolderSizeManager>,
     ) {
         let wins_dbus = Rc::clone(windows);
         let app_weak = app.downgrade();
+        let queue = Arc::clone(operations_queue);
+        let undo = Arc::clone(undo_manager);
+        let size_mgr = Arc::clone(folder_size_manager);
 
         glib::spawn_future_local(async move {
             while let Some(action) = action_rx.recv().await {
@@ -197,8 +271,7 @@ impl FinderApp {
                             win.navigate_to(&target);
                             win.present();
                         } else {
-                            let win =
-                                FinderWindow::with_initial_path(Some(app.upcast_ref()), &target);
+                            let win = Self::create_window(&app, &target, &queue, &undo, &size_mgr);
                             win.present();
                             wins.push(win);
                         }
@@ -226,10 +299,8 @@ impl FinderApp {
                                 win.coordinator.set_selection(item);
                                 win.present();
                             } else {
-                                let win = FinderWindow::with_initial_path(
-                                    Some(app.upcast_ref()),
-                                    &folder,
-                                );
+                                let win =
+                                    Self::create_window(&app, &folder, &queue, &undo, &size_mgr);
                                 win.coordinator.set_selection(item);
                                 win.present();
                                 wins.push(win);
@@ -239,6 +310,40 @@ impl FinderApp {
                 }
             }
         });
+    }
+
+    fn wire_shutdown_lifecycle(
+        app: &libadwaita::Application,
+        operations_queue: &Arc<OperationsQueue>,
+        undo_manager: &Arc<Mutex<UndoManager>>,
+    ) {
+        let queue = Arc::clone(operations_queue);
+        let undo = Arc::clone(undo_manager);
+
+        app.connect_shutdown(move |_| {
+            info!(
+                "Finder application shutting down; persisting undo journal and cancelling operations"
+            );
+            let path = default_journal_path();
+            if let Ok(guard) = undo.lock() {
+                match save_journal(&path, &guard) {
+                    Ok(()) => info!("Successfully saved undo journal to {:?}", path),
+                    Err(err) => warn!("Failed to persist undo journal on shutdown: {err}"),
+                }
+            }
+            queue.cancel_all_operations();
+        });
+    }
+
+    /// Performs graceful shutdown: persists undo journal and cancels background operations.
+    pub fn shutdown(&self) {
+        let path = default_journal_path();
+        if let Ok(guard) = self.undo_manager.lock()
+            && let Err(err) = save_journal(&path, &guard)
+        {
+            warn!("Failed to persist undo journal on shutdown: {err}");
+        }
+        self.operations_queue.cancel_all_operations();
     }
 
     fn wire_shutdown_signals(app: &libadwaita::Application) {

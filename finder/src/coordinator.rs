@@ -2,15 +2,28 @@
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::history::NavigationHistory;
+use crate::operations::{FolderSizeManager, OperationsQueue};
 use crate::ui::view_mode::ViewMode;
+use crate::undo::{UndoError, UndoManager, UndoTransaction};
+use shared::models::operation::{BatchOperation, OperationKind};
 
 /// Callback invoked when directory path changes.
 pub type PathChangedCallback = Box<dyn Fn(&Path)>;
 
 /// Callback invoked when the active selection changes.
 pub type SelectionChangedCallback = Box<dyn Fn(Option<&Path>)>;
+
+/// Clipboard buffer state tracking files copied or cut by user action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardContent {
+    /// Files copied to clipboard (will duplicate on paste).
+    Copy(Vec<PathBuf>),
+    /// Files cut to clipboard (will move and clear clipboard on paste).
+    Cut(Vec<PathBuf>),
+}
 
 /// Central coordinator arbitrating navigation, history, view modes, and item selections.
 pub struct NavigationCoordinator {
@@ -24,6 +37,14 @@ pub struct NavigationCoordinator {
     pub on_selection_changed: RefCell<Vec<SelectionChangedCallback>>,
     /// Current selected item or directory leaf, if any.
     pub active_selection: RefCell<Option<PathBuf>>,
+    /// Background operations queue for batch copy, move, trash, and delete tasks.
+    pub operations_queue: Arc<OperationsQueue>,
+    /// Transactional undo and redo manager.
+    pub undo_manager: Arc<Mutex<UndoManager>>,
+    /// Asynchronous folder size and item count calculator.
+    pub folder_size_manager: Arc<FolderSizeManager>,
+    /// Internal clipboard buffer storing copied or cut paths.
+    pub clipboard: RefCell<Option<ClipboardContent>>,
 }
 
 impl std::fmt::Debug for NavigationCoordinator {
@@ -32,6 +53,10 @@ impl std::fmt::Debug for NavigationCoordinator {
             .field("history", &self.history)
             .field("current_mode", &self.current_mode)
             .field("active_selection", &self.active_selection)
+            .field("operations_queue", &self.operations_queue)
+            .field("undo_manager", &self.undo_manager)
+            .field("folder_size_manager", &self.folder_size_manager)
+            .field("clipboard", &self.clipboard)
             .field(
                 "on_path_changed_count",
                 &self.on_path_changed.borrow().len(),
@@ -45,16 +70,42 @@ impl std::fmt::Debug for NavigationCoordinator {
 }
 
 impl NavigationCoordinator {
-    /// Constructs a new [`NavigationCoordinator`] initialized at `initial_path`.
+    /// Constructs a new [`NavigationCoordinator`] with custom managers.
     #[must_use]
-    pub fn new(initial_path: impl AsRef<Path>) -> Self {
+    pub fn with_managers(
+        initial_path: impl AsRef<Path>,
+        operations_queue: Arc<OperationsQueue>,
+        undo_manager: Arc<Mutex<UndoManager>>,
+        folder_size_manager: Arc<FolderSizeManager>,
+    ) -> Self {
         Self {
             history: RefCell::new(NavigationHistory::new(initial_path)),
             current_mode: RefCell::new(ViewMode::Columns),
             on_path_changed: RefCell::new(Vec::new()),
             on_selection_changed: RefCell::new(Vec::new()),
             active_selection: RefCell::new(None),
+            operations_queue,
+            undo_manager,
+            folder_size_manager,
+            clipboard: RefCell::new(None),
         }
+    }
+
+    /// Constructs a new [`NavigationCoordinator`] initialized at `initial_path` with default managers.
+    #[must_use]
+    pub fn new(initial_path: impl AsRef<Path>) -> Self {
+        let operations_queue = Arc::new(OperationsQueue::default());
+        let undo_manager = Arc::new(Mutex::new(UndoManager::default()));
+        operations_queue.attach_undo_manager(Arc::clone(&undo_manager));
+
+        let folder_size_manager = Arc::new(FolderSizeManager::default_manager_fallback());
+
+        Self::with_managers(
+            initial_path,
+            operations_queue,
+            undo_manager,
+            folder_size_manager,
+        )
     }
 
     /// Returns the current active directory path.
@@ -163,6 +214,197 @@ impl NavigationCoordinator {
             cb(selection);
         }
     }
+
+    /// Copies the currently selected item into the internal clipboard.
+    pub fn copy_selection(&self) {
+        if let Some(path) = self.selection() {
+            self.copy_paths(vec![path]);
+        }
+    }
+
+    /// Cuts the currently selected item into the internal clipboard.
+    pub fn cut_selection(&self) {
+        if let Some(path) = self.selection() {
+            self.cut_paths(vec![path]);
+        }
+    }
+
+    /// Stores the provided paths into the clipboard with `Copy` intent.
+    pub fn copy_paths(&self, paths: Vec<PathBuf>) {
+        if !paths.is_empty() {
+            *self.clipboard.borrow_mut() = Some(ClipboardContent::Copy(paths));
+        }
+    }
+
+    /// Stores the provided paths into the clipboard with `Cut` intent.
+    pub fn cut_paths(&self, paths: Vec<PathBuf>) {
+        if !paths.is_empty() {
+            *self.clipboard.borrow_mut() = Some(ClipboardContent::Cut(paths));
+        }
+    }
+
+    /// Returns a clone of the current clipboard content, if any.
+    #[must_use]
+    pub fn clipboard(&self) -> Option<ClipboardContent> {
+        self.clipboard.borrow().clone()
+    }
+
+    /// Clears the clipboard buffer.
+    pub fn clear_clipboard(&self) {
+        *self.clipboard.borrow_mut() = None;
+    }
+
+    /// Pastes clipboard contents into the current directory.
+    pub fn paste_to_current_directory(&self) -> Option<String> {
+        let current_dir = self.current_path();
+        self.paste_paths_to(&current_dir)
+    }
+
+    /// Pastes clipboard contents into the specified target directory.
+    pub fn paste_paths_to(&self, target_dir: &Path) -> Option<String> {
+        let content = self.clipboard.borrow().clone()?;
+        match content {
+            ClipboardContent::Copy(sources) => {
+                if sources.is_empty() {
+                    return None;
+                }
+                let op_id = format!("paste-copy-{}", uuid::Uuid::new_v4());
+                let op = BatchOperation::new(
+                    op_id,
+                    OperationKind::Copy,
+                    sources,
+                    Some(target_dir.to_path_buf()),
+                );
+                Some(self.operations_queue.enqueue_operation(op))
+            }
+            ClipboardContent::Cut(sources) => {
+                if sources.is_empty() {
+                    return None;
+                }
+                let op_id = format!("paste-cut-{}", uuid::Uuid::new_v4());
+                let op = BatchOperation::new(
+                    op_id,
+                    OperationKind::Move,
+                    sources,
+                    Some(target_dir.to_path_buf()),
+                );
+                *self.clipboard.borrow_mut() = None;
+                Some(self.operations_queue.enqueue_operation(op))
+            }
+        }
+    }
+
+    /// Executes the top undo transaction from the undo stack.
+    ///
+    /// # Errors
+    /// Returns [`UndoError`] if the inverse operation execution fails.
+    pub fn undo(&self) -> Result<Option<UndoTransaction>, UndoError> {
+        let mut guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.undo()
+    }
+
+    /// Re-executes the top redo transaction from the redo stack.
+    ///
+    /// # Errors
+    /// Returns [`UndoError`] if forward re-execution fails.
+    pub fn redo(&self) -> Result<Option<UndoTransaction>, UndoError> {
+        let mut guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.redo()
+    }
+
+    /// Returns `true` if an undo operation is available.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        let guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.can_undo()
+    }
+
+    /// Returns `true` if a redo operation is available.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        let guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.can_redo()
+    }
+
+    /// Returns the UI label for the current top undo transaction.
+    #[must_use]
+    pub fn undo_label(&self) -> Option<String> {
+        let guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.current_undo_label()
+    }
+
+    /// Returns the UI label for the current top redo transaction.
+    #[must_use]
+    pub fn redo_label(&self) -> Option<String> {
+        let guard = self
+            .undo_manager
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.current_redo_label()
+    }
+
+    /// Duplicates the currently selected item.
+    pub fn duplicate_selection(&self) -> Option<String> {
+        let path = self.selection()?;
+        self.duplicate_paths(vec![path])
+    }
+
+    /// Duplicates the given paths.
+    pub fn duplicate_paths(&self, paths: Vec<PathBuf>) -> Option<String> {
+        if paths.is_empty() {
+            return None;
+        }
+        let op_id = format!("duplicate-{}", uuid::Uuid::new_v4());
+        let op = BatchOperation::new(op_id, OperationKind::Duplicate, paths, None);
+        Some(self.operations_queue.enqueue_operation(op))
+    }
+
+    /// Moves the currently selected item to the trash.
+    pub fn trash_selection(&self) -> Option<String> {
+        let path = self.selection()?;
+        self.trash_paths(vec![path])
+    }
+
+    /// Moves the given paths to the trash.
+    pub fn trash_paths(&self, paths: Vec<PathBuf>) -> Option<String> {
+        if paths.is_empty() {
+            return None;
+        }
+        let op_id = format!("trash-{}", uuid::Uuid::new_v4());
+        let op = BatchOperation::new(op_id, OperationKind::Trash, paths, None);
+        Some(self.operations_queue.enqueue_operation(op))
+    }
+
+    /// Permanently deletes the currently selected item if confirmed.
+    pub fn delete_selection_permanently(&self, confirm: bool) -> Option<String> {
+        let path = self.selection()?;
+        self.delete_paths_permanently(vec![path], confirm)
+    }
+
+    /// Permanently deletes the given paths if confirmed.
+    pub fn delete_paths_permanently(&self, paths: Vec<PathBuf>, confirm: bool) -> Option<String> {
+        if !confirm || paths.is_empty() {
+            return None;
+        }
+        let op_id = format!("delete-{}", uuid::Uuid::new_v4());
+        let op = BatchOperation::new(op_id, OperationKind::Delete, paths, None);
+        Some(self.operations_queue.enqueue_operation(op))
+    }
 }
 
 #[cfg(test)]
@@ -244,5 +486,70 @@ mod tests {
         // View mode switching
         coordinator.set_view_mode(ViewMode::List);
         assert_eq!(coordinator.view_mode(), ViewMode::List);
+    }
+
+    #[tokio::test]
+    async fn test_coordinator_clipboard_and_operations() {
+        let coordinator = NavigationCoordinator::new("/tmp/test_dir");
+
+        // No initial selection -> copy and cut do nothing
+        coordinator.copy_selection();
+        assert_eq!(coordinator.clipboard(), None);
+        coordinator.cut_selection();
+        assert_eq!(coordinator.clipboard(), None);
+
+        // Select item
+        let file = PathBuf::from("/tmp/test_dir/file.txt");
+        coordinator.set_selection(Some(&file));
+
+        // Copy selection
+        coordinator.copy_selection();
+        assert_eq!(
+            coordinator.clipboard(),
+            Some(ClipboardContent::Copy(vec![file.clone()]))
+        );
+
+        // Paste copies and retains clipboard
+        let task_id = coordinator.paste_to_current_directory();
+        assert!(task_id.is_some());
+        assert_eq!(
+            coordinator.clipboard(),
+            Some(ClipboardContent::Copy(vec![file.clone()]))
+        );
+
+        // Cut selection
+        coordinator.cut_selection();
+        assert_eq!(
+            coordinator.clipboard(),
+            Some(ClipboardContent::Cut(vec![file]))
+        );
+
+        // Paste moves and clears clipboard
+        let task_id2 = coordinator.paste_to_current_directory();
+        assert!(task_id2.is_some());
+        assert_eq!(coordinator.clipboard(), None);
+
+        // Duplicate
+        let dup_id = coordinator.duplicate_selection();
+        assert!(dup_id.is_some());
+
+        // Trash
+        let trash_id = coordinator.trash_selection();
+        assert!(trash_id.is_some());
+
+        // Delete unconfirmed
+        assert_eq!(coordinator.delete_selection_permanently(false), None);
+
+        // Delete confirmed
+        let del_id = coordinator.delete_selection_permanently(true);
+        assert!(del_id.is_some());
+
+        // Undo & redo initial state
+        assert!(!coordinator.can_undo());
+        assert!(!coordinator.can_redo());
+        assert_eq!(coordinator.undo_label(), None);
+        assert_eq!(coordinator.redo_label(), None);
+        assert!(coordinator.undo().is_ok());
+        assert!(coordinator.redo().is_ok());
     }
 }

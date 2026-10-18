@@ -98,6 +98,14 @@ pub struct OperationsQueue {
     worker_tx: Sender<OperationEvent>,
 }
 
+impl std::fmt::Debug for OperationsQueue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OperationsQueue")
+            .field("active_count", &self.active_count())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Default for OperationsQueue {
     fn default() -> Self {
         Self::new(DEFAULT_MAX_CONCURRENCY)
@@ -311,6 +319,26 @@ impl OperationsQueue {
         Err(OperationError::Invalid(format!(
             "Task '{task_id}' not found"
         )))
+    }
+
+    /// Cancels all actively running and queued operations in the background.
+    pub fn cancel_all_operations(&self) {
+        let mut guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        for task in guard.active_tasks.values() {
+            task.control.cancel();
+        }
+
+        while let Some(op) = guard.pending_queue.pop_front() {
+            let evt = OperationEvent::Cancelled {
+                operation_id: op.id,
+            };
+            guard.broadcast_event(&evt);
+        }
+        drop(guard);
     }
 
     /// Returns snapshot progress reports for all actively running operations.

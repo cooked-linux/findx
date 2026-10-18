@@ -12,6 +12,7 @@ use super::column_list::ColumnListWidget;
 use super::divider::ColumnDividerWidget;
 use super::keyboard::{ColumnKeyAction, attach_column_keyboard_controller};
 use super::preview_column::ColumnPreviewWidget;
+use crate::coordinator::NavigationCoordinator;
 use crate::views::columns::loader::{
     ColumnWatcherEvent, ColumnWatcherHandle, read_directory, start_column_watcher,
 };
@@ -83,6 +84,7 @@ struct ContainerInner {
     on_path_changed: RefCell<Option<PathChangedCallback>>,
     on_quick_look: RefCell<Option<FileActionCallback>>,
     on_open: RefCell<Option<FileActionCallback>>,
+    coordinator: RefCell<Option<Rc<NavigationCoordinator>>>,
 }
 
 impl fmt::Debug for ContainerInner {
@@ -138,6 +140,7 @@ impl ColumnContainer {
             on_path_changed: RefCell::new(None),
             on_quick_look: RefCell::new(None),
             on_open: RefCell::new(None),
+            coordinator: RefCell::new(None),
         });
 
         let container = Self {
@@ -150,6 +153,16 @@ impl ColumnContainer {
         container.navigate_root(&root_buf);
 
         container
+    }
+
+    /// Attaches a [`NavigationCoordinator`] to handle context menus and drag-and-drop on columns.
+    pub fn set_coordinator(&self, coordinator: &Rc<NavigationCoordinator>) {
+        *self.inner.coordinator.borrow_mut() = Some(Rc::clone(coordinator));
+        for col in self.inner.columns.borrow().iter() {
+            if let ActiveColumn::Directory { widget, .. } = col {
+                widget.set_coordinator(coordinator);
+            }
+        }
     }
 
     /// Navigates the container to a new root directory, clearing all existing columns.
@@ -352,6 +365,9 @@ impl ColumnContainer {
         let path_buf = path.to_path_buf();
         let model = ColumnViewModel::new_directory(index, width, path_buf.clone(), Vec::new());
         let widget = ColumnListWidget::new(model);
+        if let Some(coord) = self.inner.coordinator.borrow().as_ref() {
+            widget.set_coordinator(coord);
+        }
 
         self.append_divider_if_needed(index, width);
         self.inner_box.append(&widget.scrolled_window);

@@ -1,4 +1,5 @@
 pub mod columns;
+pub mod context_menu;
 pub mod group_header;
 pub mod header_bar;
 pub mod list;
