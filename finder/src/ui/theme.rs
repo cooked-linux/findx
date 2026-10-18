@@ -534,6 +534,7 @@ pub fn install_finder_theme() {
         );
     }
     crate::ui::operations::install_operations_theme();
+    crate::ui::quicklook::install_quicklook_theme();
 }
 
 /// Applies `.finder-dark` or `.finder-light` classes to the widget based on `is_dark`.
