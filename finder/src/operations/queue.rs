@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use async_channel::{Receiver, Sender};
 use shared::models::operation::{BatchOperation, OperationKind, ProgressReport};
@@ -9,6 +10,7 @@ use shared::models::operation::{BatchOperation, OperationKind, ProgressReport};
 use super::error::{OperationError, Result};
 use super::types::{OperationEvent, TaskControl};
 use super::worker::OperationWorker;
+use crate::undo::{FileOperationRecord, UndoManager, UndoOperationType, UndoTransaction};
 
 /// Default maximum parallel active operations allowed simultaneously.
 pub const DEFAULT_MAX_CONCURRENCY: usize = 2;
@@ -24,6 +26,10 @@ pub struct ActiveTask {
     pub control: TaskControl,
     /// Latest progress report received from the worker.
     pub last_report: Option<ProgressReport>,
+    /// Underlying batch operation request.
+    pub operation: BatchOperation,
+    /// Records of individual items successfully completed so far.
+    pub completed_records: Vec<FileOperationRecord>,
 }
 
 /// Internal mutable state of the operations queue.
@@ -32,6 +38,7 @@ struct OperationsQueueState {
     pending_queue: VecDeque<BatchOperation>,
     active_tasks: HashMap<String, ActiveTask>,
     subscribers: Vec<Sender<OperationEvent>>,
+    undo_manager: Option<Arc<Mutex<UndoManager>>>,
 }
 
 impl OperationsQueueState {
@@ -41,6 +48,7 @@ impl OperationsQueueState {
             pending_queue: VecDeque::new(),
             active_tasks: HashMap::new(),
             subscribers: Vec::new(),
+            undo_manager: None,
         }
     }
 
@@ -59,6 +67,8 @@ impl OperationsQueueState {
             kind: op.kind,
             control: control.clone(),
             last_report: None,
+            operation: op.clone(),
+            completed_records: Vec::new(),
         };
         self.active_tasks.insert(op.id.clone(), task);
         let worker = OperationWorker::new(op, control, worker_tx.clone());
@@ -126,8 +136,64 @@ impl OperationsQueue {
                             task.last_report = Some(report.clone());
                         }
                     }
-                    OperationEvent::Completed { operation_id }
-                    | OperationEvent::Cancelled { operation_id }
+                    OperationEvent::ItemCompleted {
+                        operation_id,
+                        source,
+                        destination,
+                    } => {
+                        if let Some(task) = guard.active_tasks.get_mut(operation_id) {
+                            let dest_path = destination.clone().unwrap_or_else(|| source.clone());
+                            let (ino, dev) = shared::fs::stat::stat_path(&dest_path)
+                                .map(|s| (s.ino, s.dev))
+                                .or_else(|_| {
+                                    shared::fs::stat::stat_path(source).map(|s| (s.ino, s.dev))
+                                })
+                                .unwrap_or((0, 0));
+                            task.completed_records.push(FileOperationRecord::new(
+                                source.clone(),
+                                dest_path,
+                                ino,
+                                dev,
+                                SystemTime::now(),
+                                None,
+                            ));
+                        }
+                    }
+                    OperationEvent::Completed { operation_id } => {
+                        if let Some(task) = guard.active_tasks.remove(operation_id) {
+                            if let Some(ref undo_mgr) = guard.undo_manager
+                                && let Some(op_type) = map_operation_kind_to_undo(task.kind)
+                            {
+                                let records = if task.completed_records.is_empty() {
+                                    create_records_from_batch_operation(&task.operation)
+                                } else {
+                                    task.completed_records
+                                };
+
+                                if !records.is_empty() {
+                                    let description = format!(
+                                        "{} of {} {}",
+                                        task.kind,
+                                        records.len(),
+                                        if records.len() == 1 { "item" } else { "items" }
+                                    );
+                                    let tx = UndoTransaction::new(
+                                        uuid::Uuid::new_v4().to_string(),
+                                        op_type,
+                                        description,
+                                        records,
+                                        SystemTime::now(),
+                                    );
+                                    let mut mgr = undo_mgr
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    mgr.record_transaction(tx);
+                                }
+                            }
+                            guard.maybe_schedule_next(&worker_tx);
+                        }
+                    }
+                    OperationEvent::Cancelled { operation_id }
                     | OperationEvent::Failed { operation_id, .. } => {
                         guard.active_tasks.remove(operation_id);
                         guard.maybe_schedule_next(&worker_tx);
@@ -272,6 +338,53 @@ impl OperationsQueue {
         guard.subscribers.push(tx);
         rx
     }
+
+    /// Attaches an [`UndoManager`] to automatically record completed operations into undo history.
+    pub fn attach_undo_manager(&self, undo_manager: Arc<Mutex<UndoManager>>) {
+        let mut guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.undo_manager = Some(undo_manager);
+    }
+}
+
+const fn map_operation_kind_to_undo(kind: OperationKind) -> Option<UndoOperationType> {
+    match kind {
+        OperationKind::Move => Some(UndoOperationType::Move),
+        OperationKind::Copy => Some(UndoOperationType::Copy),
+        OperationKind::Duplicate => Some(UndoOperationType::Duplicate),
+        OperationKind::Trash => Some(UndoOperationType::Trash),
+        OperationKind::Restore | OperationKind::Delete => None,
+    }
+}
+
+fn create_records_from_batch_operation(op: &BatchOperation) -> Vec<FileOperationRecord> {
+    let mut records = Vec::with_capacity(op.sources.len());
+    for src in &op.sources {
+        let dst = op.destination.as_ref().map_or_else(
+            || src.clone(),
+            |dest_dir| {
+                src.file_name()
+                    .map_or_else(|| dest_dir.clone(), |name| dest_dir.join(name))
+            },
+        );
+
+        let (ino, dev) = shared::fs::stat::stat_path(&dst)
+            .map(|s| (s.ino, s.dev))
+            .or_else(|_| shared::fs::stat::stat_path(src).map(|s| (s.ino, s.dev)))
+            .unwrap_or((0, 0));
+
+        records.push(FileOperationRecord::new(
+            src.clone(),
+            dst,
+            ino,
+            dev,
+            SystemTime::now(),
+            None,
+        ));
+    }
+    records
 }
 
 #[cfg(test)]

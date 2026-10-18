@@ -17,8 +17,11 @@ static GTK_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Helper to set up a temporary directory hierarchy for integration testing.
 fn setup_temp_hierarchy() -> PathBuf {
-    let base = std::env::temp_dir().join(format!("findx_integ_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&base);
+    let base = tempfile::Builder::new()
+        .prefix("findx_integ_")
+        .tempdir()
+        .unwrap()
+        .keep();
     fs::create_dir_all(base.join("Documents/Work")).unwrap();
     fs::create_dir_all(base.join("Downloads")).unwrap();
     fs::create_dir_all(base.join("Music")).unwrap();

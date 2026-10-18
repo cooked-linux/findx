@@ -12,6 +12,7 @@ pub mod service;
 pub mod sidebar;
 pub mod sorting;
 pub mod ui;
+pub mod undo;
 pub mod views;
 
 pub use app::{FINDER_APP_ID, FinderApp, FinderCliArgs};
@@ -25,5 +26,6 @@ pub use operations::{
 pub use service::{
     DbusServiceHandle, FileManagerAction, FileManagerService, export_file_manager_service,
 };
+pub use undo::{FileOperationRecord, UndoManager, UndoOperationType, UndoTransaction};
 pub use views::columns::{ColumnEntry, ColumnKind, ColumnViewModel};
 pub use views::list::{ExpandedNodesCache, LruWatchPool, TreeListViewModel, TreeNode};

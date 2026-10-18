@@ -133,6 +133,14 @@ pub fn move_to_trash(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Alias for [`move_to_trash`].
+///
+/// # Errors
+/// Returns an error if the path does not exist or moving to trash fails.
+pub fn send_to_trash(path: &Path) -> Result<()> {
+    move_to_trash(path)
+}
+
 /// Restores a previously trashed item to its original location.
 ///
 /// Attempts restoration via the `trash` crate first. If the item is not registered

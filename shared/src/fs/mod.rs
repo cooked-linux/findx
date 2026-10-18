@@ -16,7 +16,7 @@ pub use natord::natural_cmp;
 pub use stat::{EnhancedStat, InodeKey, is_same_filesystem, lstat_path, stat_path};
 pub use trash::{
     TrashInfo, TrashedItem, empty_trash, list_trash_items, move_to_trash, parse_trash_info,
-    restore_from_trash,
+    restore_from_trash, send_to_trash,
 };
 pub use xattr::{
     XATTR_COLOR, XATTR_COMMENT, XATTR_ORIGIN_URL, XATTR_TAGS, get_comment, get_origin_url,
