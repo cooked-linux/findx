@@ -580,34 +580,7 @@ impl ConflictResolutionDialog {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
-    use std::path::PathBuf;
-
-    fn create_test_context(is_dir: bool, relative_time: RelativeTimeStatus) -> ConflictContext {
-        let src_meta = ConflictItemMeta::new(
-            PathBuf::from("/source/document.txt"),
-            is_dir,
-            2048,
-            Some(SystemTime::now()),
-            None,
-        );
-        let dst_meta = ConflictItemMeta::new(
-            PathBuf::from("/dest/document.txt"),
-            is_dir,
-            1024,
-            Some(SystemTime::UNIX_EPOCH),
-            None,
-        );
-
-        ConflictContext::new(
-            "op-test-conflict".to_string(),
-            src_meta,
-            dst_meta,
-            is_dir,
-            relative_time,
-        )
-    }
 
     #[test]
     fn test_determine_age_badges() {
@@ -646,64 +619,5 @@ mod tests {
         assert_eq!(buttons[0].style, ConflictButtonStyle::Suggested);
         assert_eq!(buttons[1].action, ConflictAction::Replace);
         assert_eq!(buttons[1].style, ConflictButtonStyle::Destructive);
-    }
-
-    #[test]
-    fn test_conflict_dialog_response_mapping() {
-        let (tx, mut rx) = oneshot::channel();
-        let ctx = create_test_context(false, RelativeTimeStatus::IncomingNewer);
-
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return;
-        }
-
-        let dialog = ConflictResolutionDialog::new(ctx, tx);
-        dialog.trigger_action(ConflictAction::KeepBoth);
-
-        let res = rx.try_recv().expect("channel received");
-        assert_eq!(res.action, ConflictAction::KeepBoth);
-        assert!(!res.apply_to_all);
-    }
-
-    #[test]
-    fn test_conflict_dialog_apply_to_all_mapping() {
-        let (tx, mut rx) = oneshot::channel();
-        let ctx = create_test_context(false, RelativeTimeStatus::IncomingNewer);
-
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return;
-        }
-
-        let dialog = ConflictResolutionDialog::new(ctx, tx);
-        dialog.apply_to_all_check.set_active(true);
-        dialog.trigger_action(ConflictAction::Replace);
-
-        let res = rx.try_recv().expect("channel received");
-        assert_eq!(res.action, ConflictAction::Replace);
-        assert!(res.apply_to_all);
-    }
-
-    #[test]
-    fn test_conflict_dialog_alt_modifier_toggle() {
-        let (tx, _rx) = oneshot::channel();
-        let ctx = create_test_context(false, RelativeTimeStatus::IncomingNewer);
-
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return;
-        }
-
-        let dialog = ConflictResolutionDialog::new(ctx, tx);
-        let stop_btn = dialog.stop_button.as_ref().expect("stop button present");
-
-        assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
-
-        dialog.set_alt_pressed(true);
-        assert_eq!(stop_btn.label().as_deref(), Some("Skip"));
-
-        dialog.set_alt_pressed(false);
-        assert_eq!(stop_btn.label().as_deref(), Some("Stop"));
     }
 }

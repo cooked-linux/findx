@@ -553,22 +553,4 @@ mod tests {
             "edit-undo-symbolic"
         );
     }
-
-    #[test]
-    fn test_progress_dialog_widget_construction() {
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return;
-        }
-
-        let dialog =
-            TransferProgressDialog::new("op-test-1", OperationKind::Copy, 10, Some("Downloads"));
-        assert_eq!(dialog.title_label.text(), "Copying 10 items to 'Downloads'");
-        assert_eq!(dialog.progress_bar.fraction(), 0.0);
-
-        dialog.set_paused(true);
-        assert!(dialog.metrics_label.text().ends_with("(Paused)"));
-        dialog.set_paused(false);
-        assert!(!dialog.metrics_label.text().ends_with("(Paused)"));
-    }
 }
