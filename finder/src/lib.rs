@@ -7,6 +7,7 @@ pub mod coordinator;
 pub mod error;
 pub mod grouping;
 pub mod history;
+pub mod operations;
 pub mod service;
 pub mod sidebar;
 pub mod sorting;
@@ -18,6 +19,9 @@ pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_use
 pub use breadcrumbs::{BreadcrumbDisplayItem, BreadcrumbLineage, PathSegment, layout_segments};
 pub use coordinator::{NavigationCoordinator, PathChangedCallback, SelectionChangedCallback};
 pub use error::{FinderError, Result};
+pub use operations::{
+    ActiveTask, BatchOperation, OperationError, OperationEvent, OperationsQueue, ProgressReport,
+};
 pub use service::{
     DbusServiceHandle, FileManagerAction, FileManagerService, export_file_manager_service,
 };
