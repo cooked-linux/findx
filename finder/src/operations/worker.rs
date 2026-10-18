@@ -6,7 +6,13 @@ use std::time::{Duration, Instant};
 use async_channel::Sender;
 use shared::models::operation::{BatchOperation, OperationKind, ProgressReport};
 
+use super::conflict::detector::check_collision;
+use super::conflict::models::ConflictAction;
+use super::conflict::resolver::ConflictArbiter;
+use super::conflict::staging::StagedRollback;
 use super::error::{OperationError, Result};
+use super::merge::execute_directory_merge;
+use super::naming::generate_unique_path;
 use super::preflight::run_preflight_scan;
 use super::recovery::{RECOVERY_CHECKPOINT_INTERVAL, RecoveryManager, RecoveryState};
 use super::transfer::execute_item_transfer;
@@ -103,6 +109,7 @@ pub struct OperationWorker {
     control: TaskControl,
     event_tx: Sender<OperationEvent>,
     recovery: Option<RecoveryManager>,
+    arbiter: Option<ConflictArbiter>,
 }
 
 impl OperationWorker {
@@ -118,6 +125,7 @@ impl OperationWorker {
             control,
             event_tx,
             recovery: None,
+            arbiter: None,
         }
     }
 
@@ -125,6 +133,13 @@ impl OperationWorker {
     #[must_use]
     pub fn with_recovery(mut self, recovery: RecoveryManager) -> Self {
         self.recovery = Some(recovery);
+        self
+    }
+
+    /// Attaches a [`ConflictArbiter`] for interactive collision detection and resolution.
+    #[must_use]
+    pub fn with_conflict_arbiter(mut self, arbiter: ConflictArbiter) -> Self {
+        self.arbiter = Some(arbiter);
         self
     }
 
@@ -171,7 +186,7 @@ impl OperationWorker {
     }
 
     /// Executes pre-flight scan followed by the item transfer loop.
-    fn run_pipeline(&self, recovery: Option<&RecoveryManager>) -> Result<()> {
+    fn run_pipeline(&mut self, recovery: Option<&RecoveryManager>) -> Result<()> {
         let event_tx_clone = self.event_tx.clone();
         let manifest = run_preflight_scan(&self.op, &self.control, move |evt| {
             let _ = event_tx_clone.send_blocking(evt);
@@ -204,8 +219,9 @@ impl OperationWorker {
     }
 
     /// Executes transfer loop across all scheduled items in the manifest.
+    #[allow(clippy::too_many_lines)]
     fn execute_manifest_transfers(
-        &self,
+        &mut self,
         manifest: &PreflightManifest,
         recovery: Option<&RecoveryManager>,
     ) -> Result<()> {
@@ -218,45 +234,120 @@ impl OperationWorker {
         for item in &manifest.items {
             self.handle_pause_and_cancel()?;
 
+            let mut current_destination = item.destination.clone();
+
+            // Collision inspection and interactive conflict resolution
+            if let Some(ref dst) = current_destination
+                && let Some(context) = check_collision(&self.op.id, &item.source, dst)?
+            {
+                let action = if let Some(ref mut arbiter) = self.arbiter {
+                    arbiter.resolve_conflict_blocking(&context)?
+                } else {
+                    ConflictAction::Replace
+                };
+
+                match action {
+                    ConflictAction::Skip => {
+                        completed_items = completed_items.saturating_add(1);
+                        continue;
+                    }
+                    ConflictAction::Stop => {
+                        return Err(OperationError::Cancelled);
+                    }
+                    ConflictAction::KeepBoth => {
+                        current_destination = Some(generate_unique_path(dst));
+                    }
+                    ConflictAction::Merge if context.is_directory_collision => {
+                        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                            let summary = handle.block_on(execute_directory_merge(
+                                &item.source,
+                                dst,
+                                &self.control,
+                                |_| {},
+                            ))?;
+                            base_transferred =
+                                base_transferred.saturating_add(summary.bytes_transferred);
+                        }
+                        completed_items = completed_items.saturating_add(1);
+                        let _ = self.event_tx.send_blocking(OperationEvent::ItemCompleted {
+                            operation_id: self.op.id.clone(),
+                            source: item.source.clone(),
+                            destination: Some(dst.clone()),
+                        });
+                        continue;
+                    }
+                    _ => {
+                        // Replace (or fallback for file Merge)
+                    }
+                }
+            }
+
             let mut item_transferred: u64 = 0;
             let current_path = item.source.clone();
 
-            execute_item_transfer(item, self.op.kind, &self.control, |copied, _total| {
-                item_transferred = copied;
-                let current_total = base_transferred.saturating_add(item_transferred);
-                let now = Instant::now();
+            let mut transfer_item = item.clone();
+            transfer_item.destination.clone_from(&current_destination);
 
-                if now.duration_since(last_report_time) >= PROGRESS_THROTTLE_INTERVAL {
-                    let rate = estimator.update(current_total);
-                    let remaining =
-                        estimator.estimate_remaining_seconds(manifest.total_bytes, current_total);
-                    let report = ProgressReport {
-                        operation_id: self.op.id.clone(),
-                        completed_items,
-                        total_items: manifest.total_items,
-                        transferred_bytes: current_total,
-                        total_bytes: manifest.total_bytes,
-                        bytes_per_second: rate,
-                        estimated_remaining_seconds: remaining,
-                        current_file: Some(current_path.clone()),
-                    };
-                    let _ = self
-                        .event_tx
-                        .send_blocking(OperationEvent::Progress(report));
-                    last_report_time = now;
-                }
+            let rollback_opt = if let Some(ref dst) = current_destination
+                && dst.exists()
+            {
+                Some(StagedRollback::stage(dst)?)
+            } else {
+                None
+            };
 
-                if now.duration_since(last_checkpoint_time) >= RECOVERY_CHECKPOINT_INTERVAL {
-                    if let Some(rec) = recovery {
-                        let _ = rec.update_checkpoint(
+            let transfer_res = execute_item_transfer(
+                &transfer_item,
+                self.op.kind,
+                &self.control,
+                |copied, _total| {
+                    item_transferred = copied;
+                    let current_total = base_transferred.saturating_add(item_transferred);
+                    let now = Instant::now();
+
+                    if now.duration_since(last_report_time) >= PROGRESS_THROTTLE_INTERVAL {
+                        let rate = estimator.update(current_total);
+                        let remaining = estimator
+                            .estimate_remaining_seconds(manifest.total_bytes, current_total);
+                        let report = ProgressReport {
+                            operation_id: self.op.id.clone(),
                             completed_items,
-                            current_total,
-                            Some(current_path.clone()),
-                        );
+                            total_items: manifest.total_items,
+                            transferred_bytes: current_total,
+                            total_bytes: manifest.total_bytes,
+                            bytes_per_second: rate,
+                            estimated_remaining_seconds: remaining,
+                            current_file: Some(current_path.clone()),
+                        };
+                        let _ = self
+                            .event_tx
+                            .send_blocking(OperationEvent::Progress(report));
+                        last_report_time = now;
                     }
-                    last_checkpoint_time = now;
+
+                    if now.duration_since(last_checkpoint_time) >= RECOVERY_CHECKPOINT_INTERVAL {
+                        if let Some(rec) = recovery {
+                            let _ = rec.update_checkpoint(
+                                completed_items,
+                                current_total,
+                                Some(current_path.clone()),
+                            );
+                        }
+                        last_checkpoint_time = now;
+                    }
+                },
+            );
+
+            match transfer_res {
+                Ok(_) => {
+                    if let Some(rollback) = rollback_opt {
+                        rollback.commit()?;
+                    }
                 }
-            })?;
+                Err(err) => {
+                    return Err(err);
+                }
+            }
 
             completed_items = completed_items.saturating_add(1);
             base_transferred = base_transferred.saturating_add(item.size_bytes);
@@ -264,7 +355,7 @@ impl OperationWorker {
             let _ = self.event_tx.send_blocking(OperationEvent::ItemCompleted {
                 operation_id: self.op.id.clone(),
                 source: item.source.clone(),
-                destination: item.destination.clone(),
+                destination: current_destination,
             });
 
             self.emit_progress_checkpoint(
@@ -408,5 +499,140 @@ mod tests {
             let target_file = dst_dir.join(format!("file_{i}.bin"));
             assert!(target_file.exists(), "file_{i}.bin must exist in dst");
         }
+    }
+
+    #[tokio::test]
+    async fn test_worker_with_conflict_arbiter_keep_both() {
+        use crate::operations::conflict::models::ConflictResolution;
+
+        let dir = tempdir().expect("tempdir");
+        let src_dir = dir.path().join("src");
+        let dst_dir = dir.path().join("dst");
+        std::fs::create_dir(&src_dir).expect("create src");
+        std::fs::create_dir(&dst_dir).expect("create dst");
+
+        let src_file = src_dir.join("report.pdf");
+        let dst_file = dst_dir.join("report.pdf");
+
+        File::create(&src_file)
+            .expect("create src")
+            .write_all(b"new incoming report")
+            .expect("write src");
+        File::create(&dst_file)
+            .expect("create dst")
+            .write_all(b"original existing report")
+            .expect("write dst");
+
+        let op = BatchOperation {
+            id: "batch-conflict-keep".into(),
+            kind: OperationKind::Copy,
+            sources: vec![src_file],
+            destination: Some(dst_dir.clone()),
+        };
+
+        let control = TaskControl::new();
+        let (tx, rx) = async_channel::unbounded();
+        let (prompt_tx, prompt_rx) =
+            async_channel::unbounded::<crate::operations::conflict::resolver::ConflictPrompt>();
+
+        tokio::spawn(async move {
+            if let Ok(prompt) = prompt_rx.recv().await {
+                let _ = prompt
+                    .responder
+                    .send(ConflictResolution::new(ConflictAction::KeepBoth, false));
+            }
+        });
+
+        let arbiter = ConflictArbiter::new(prompt_tx);
+        let worker = OperationWorker::new(op, control, tx).with_conflict_arbiter(arbiter);
+
+        let handle = worker.spawn();
+        while let Ok(evt) = rx.recv().await {
+            if matches!(
+                evt,
+                OperationEvent::Completed { .. }
+                    | OperationEvent::Cancelled { .. }
+                    | OperationEvent::Failed { .. }
+            ) {
+                break;
+            }
+        }
+
+        let res = handle.await.expect("join");
+        assert!(res.is_ok());
+
+        assert!(dst_dir.join("report.pdf").exists());
+        assert!(dst_dir.join("report (1).pdf").exists());
+    }
+
+    #[tokio::test]
+    async fn test_worker_with_conflict_arbiter_skip() {
+        use crate::operations::conflict::models::ConflictResolution;
+        use std::io::Read;
+
+        let dir = tempdir().expect("tempdir");
+        let src_dir = dir.path().join("src");
+        let dst_dir = dir.path().join("dst");
+        std::fs::create_dir(&src_dir).expect("create src");
+        std::fs::create_dir(&dst_dir).expect("create dst");
+
+        let src_file = src_dir.join("report.pdf");
+        let dst_file = dst_dir.join("report.pdf");
+
+        File::create(&src_file)
+            .expect("create src")
+            .write_all(b"new incoming report")
+            .expect("write src");
+        File::create(&dst_file)
+            .expect("create dst")
+            .write_all(b"original existing report")
+            .expect("write dst");
+
+        let op = BatchOperation {
+            id: "batch-conflict-skip".into(),
+            kind: OperationKind::Copy,
+            sources: vec![src_file],
+            destination: Some(dst_dir.clone()),
+        };
+
+        let control = TaskControl::new();
+        let (tx, rx) = async_channel::unbounded();
+        let (prompt_tx, prompt_rx) =
+            async_channel::unbounded::<crate::operations::conflict::resolver::ConflictPrompt>();
+
+        tokio::spawn(async move {
+            if let Ok(prompt) = prompt_rx.recv().await {
+                let _ = prompt
+                    .responder
+                    .send(ConflictResolution::new(ConflictAction::Skip, false));
+            }
+        });
+
+        let arbiter = ConflictArbiter::new(prompt_tx);
+        let worker = OperationWorker::new(op, control, tx).with_conflict_arbiter(arbiter);
+
+        let handle = worker.spawn();
+        while let Ok(evt) = rx.recv().await {
+            if matches!(
+                evt,
+                OperationEvent::Completed { .. }
+                    | OperationEvent::Cancelled { .. }
+                    | OperationEvent::Failed { .. }
+            ) {
+                break;
+            }
+        }
+
+        let res = handle.await.expect("join");
+        assert!(res.is_ok());
+
+        // File was skipped, original remains intact
+        let mut content = String::new();
+        File::open(&dst_file)
+            .expect("open")
+            .read_to_string(&mut content)
+            .expect("read");
+        assert_eq!(content, "original existing report");
+        assert!(!dst_dir.join("report (1).pdf").exists());
     }
 }
