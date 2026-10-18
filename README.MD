@@ -2,7 +2,7 @@ NOTE: I HAVE NOT REACHED AN MVP YET
 
 # Findx
 
-Findx brings the Finder and Spotlight experience from macOS to Linux. It aims to provide a familiar file navigation and search workflow for Linux users while preserving the speed, simplicity, and polish that users expect from macOS productivity tools.
+Findx brings the Finder and Spotlight experience from macOS to Linux. It aims to provide a familiar file navigation and search workflow for Linux users while preserving the speed, simplicity, and p[...]
 
 ## Why this?
 
@@ -87,7 +87,9 @@ Contributions are welcome. If you want to improve Findx, open an issue or submit
 
 ## License
 
-This project currently does not include a license file. Add a LICENSE file before publishing or distributing it more broadly.
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+If you would like, I can also add a LICENSE file with the full MIT text in a follow-up commit.
 
 ## Project Goal
 
