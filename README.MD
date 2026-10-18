@@ -1,3 +1,5 @@
+NOTE: I HAVE NOT REACHED TO A MVP YET
+
 # Findx
 
 Findx brings the Finder and Spotlight experience from macOS to Linux. It aims to provide a familiar file navigation and search workflow for Linux users while preserving the speed, simplicity, and polish that users expect from macOS productivity tools.
