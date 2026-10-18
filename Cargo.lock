@@ -696,20 +696,27 @@ name = "finder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
  "chrono",
+ "filetime",
  "gdk4",
  "gio",
  "glib",
  "gtk4",
  "libadwaita",
+ "libc",
+ "nix",
  "rayon",
  "serde",
  "serde_json",
  "shared",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
+ "xattr",
  "zbus",
 ]
 
