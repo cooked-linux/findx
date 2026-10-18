@@ -1,9 +1,11 @@
 //! Two-tier caching architecture for folder sizes (in-memory LRU + persistent SQLite).
 
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::time::{Duration, SystemTime};
 
@@ -26,6 +28,7 @@ enum DbOp {
         dev_id: u64,
         inode: u64,
         result: FolderSizeResult,
+        seq: u64,
     },
     Invalidate(Vec<PathBuf>),
     Flush(std_mpsc::Sender<()>),
@@ -37,6 +40,9 @@ pub struct FolderSizeCache {
     l1_cache: Arc<RwLock<LruCache<PathBuf, FolderSizeResult>>>,
     db_conn: Arc<Mutex<Connection>>,
     db_tx: async_channel::Sender<DbOp>,
+    path_epochs: Arc<RwLock<HashMap<PathBuf, u64>>>,
+    inserted_epochs: Arc<RwLock<HashMap<PathBuf, u64>>>,
+    seq_counter: Arc<AtomicU64>,
 }
 
 impl FolderSizeCache {
@@ -76,9 +82,13 @@ impl FolderSizeCache {
         let capacity = NonZeroUsize::new(DEFAULT_LRU_CAPACITY).unwrap_or(NonZeroUsize::MIN);
         let l1_cache = Arc::new(RwLock::new(LruCache::new(capacity)));
         let db_conn = Arc::new(Mutex::new(conn));
+        let path_epochs = Arc::new(RwLock::new(HashMap::new()));
+        let inserted_epochs = Arc::new(RwLock::new(HashMap::new()));
+        let seq_counter = Arc::new(AtomicU64::new(1));
 
         let (db_tx, db_rx) = async_channel::unbounded::<DbOp>();
         let worker_conn = Arc::clone(&db_conn);
+        let worker_epochs = Arc::clone(&path_epochs);
 
         // Spawn dedicated background worker thread for asynchronous SQLite persistence
         std::thread::Builder::new()
@@ -91,7 +101,15 @@ impl FolderSizeCache {
                             dev_id,
                             inode,
                             result,
+                            seq,
                         } => {
+                            // Discard upsert if path was invalidated after insertion was scheduled
+                            if let Some(&inval_seq) = worker_epochs.read().get(&path)
+                                && seq <= inval_seq
+                            {
+                                continue;
+                            }
+
                             let guard = worker_conn.lock();
                             if let Err(err) =
                                 upsert_folder_size_record(&guard, &path, dev_id, inode, &result)
@@ -124,6 +142,9 @@ impl FolderSizeCache {
             l1_cache,
             db_conn,
             db_tx,
+            path_epochs,
+            inserted_epochs,
+            seq_counter,
         })
     }
 
@@ -134,6 +155,14 @@ impl FolderSizeCache {
     /// 3. If present but stale (`dir_mtime != current_mtime`), invalidates the entry and returns `None`.
     #[must_use]
     pub fn get(&self, path: &Path, current_mtime: SystemTime) -> Option<FolderSizeResult> {
+        // If this path was invalidated in this session and not re-inserted after, return None
+        if let Some(&inval_seq) = self.path_epochs.read().get(path) {
+            let ins_seq = self.inserted_epochs.read().get(path).copied().unwrap_or(0);
+            if ins_seq <= inval_seq {
+                return None;
+            }
+        }
+
         // 1. Layer 1 LRU check
         {
             let mut l1 = self.l1_cache.write();
@@ -170,6 +199,9 @@ impl FolderSizeCache {
 
     /// Inserts a newly calculated result into Layer 1 LRU and enqueues an asynchronous write to Layer 2 SQLite.
     pub fn insert(&self, path: PathBuf, result: FolderSizeResult) {
+        let seq = self.seq_counter.fetch_add(1, Ordering::SeqCst);
+        self.inserted_epochs.write().insert(path.clone(), seq);
+
         // Store in L1 LRU
         self.l1_cache.write().put(path.clone(), result);
 
@@ -183,12 +215,15 @@ impl FolderSizeCache {
             dev_id,
             inode,
             result,
+            seq,
         });
     }
 
     /// Invalidates a directory path and all its ancestor directories from Layer 1 LRU
     /// and marks them dirty/deleted in Layer 2 SQLite.
     pub fn invalidate(&self, path: &Path) {
+        let inval_seq = self.seq_counter.fetch_add(1, Ordering::SeqCst);
+
         let mut paths_to_evict = Vec::new();
         paths_to_evict.push(path.to_path_buf());
 
@@ -196,6 +231,14 @@ impl FolderSizeCache {
         while let Some(parent) = curr {
             paths_to_evict.push(parent.to_path_buf());
             curr = parent.parent();
+        }
+
+        // Record invalidation sequence for path and all ancestors
+        {
+            let mut epochs = self.path_epochs.write();
+            for p in &paths_to_evict {
+                epochs.insert(p.clone(), inval_seq);
+            }
         }
 
         // Evict from L1 LRU
