@@ -190,7 +190,7 @@ impl FinderHeaderBar {
             .build();
 
         let quick_look_btn = gtk4::Button::builder()
-            .label("Quick Look")
+            .icon_name("eye-symbolic")
             .tooltip_text("Quick Look Preview (Space)")
             .css_classes(["action-btn"])
             .build();
@@ -326,6 +326,20 @@ impl FinderHeaderBar {
     pub fn connect_search_activate<F: Fn(&str) + 'static>(&self, callback: F) {
         self.search_entry.connect_activate(move |entry| {
             callback(entry.text().as_str());
+        });
+    }
+
+    /// Connects a handler invoked when the Quick Look button is clicked.
+    pub fn connect_quicklook<F: Fn() + 'static>(&self, callback: F) {
+        self.quick_look_btn.connect_clicked(move |_| {
+            callback();
+        });
+    }
+
+    /// Connects a handler invoked when the Get Info button is clicked.
+    pub fn connect_get_info<F: Fn() + 'static>(&self, callback: F) {
+        self.get_info_btn.connect_clicked(move |_| {
+            callback();
         });
     }
 }

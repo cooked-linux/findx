@@ -198,6 +198,11 @@ impl ColumnContainer {
         self.inner.active_column_index.set(column_index);
         self.update_ancestor_styles();
 
+        if let Some(coord) = self.inner.coordinator.borrow().as_ref() {
+            coord.set_selected_paths(vec![selected_entry.path().to_path_buf()]);
+        }
+        self.emit_path_changed(selected_entry.path());
+
         // 3. If selected item is directory -> push child directory column
         if selected_entry.is_dir() {
             let child_path = selected_entry.path().to_path_buf();
