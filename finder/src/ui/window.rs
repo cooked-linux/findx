@@ -485,22 +485,28 @@ impl FinderWindow {
         prefs.calculate_all_sizes = !prefs.calculate_all_sizes;
         let _ = prefs.save();
         let curr = self.history.borrow().current_path().to_path_buf();
-        self.list_view.navigate_root(&curr);
+        if !crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
+            self.list_view.navigate_root(&curr);
+        }
     }
 
     /// Handles filtering by tag emitted from the sidebar.
     pub fn handle_tag_filter(&self, event: TagFilterEvent) {
         match event {
             TagFilterEvent::Selected { tag_name, color: _ } => {
-                self.header_bar
-                    .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
-                self.breadcrumbs_label
-                    .set_text(&format!("Tags › {tag_name}"));
-                self.path_bar.set_tag_filter(&tag_name);
+                let virtual_path =
+                    crate::ui::tagging::sidebar_filter::make_tag_virtual_path(&tag_name);
+                self.navigate_to(&virtual_path);
             }
             TagFilterEvent::Cleared => {
                 let curr = self.history.borrow().current_path().to_path_buf();
-                self.sync_path_ui(&curr);
+                if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
+                    if let Ok(home) = std::env::var("HOME") {
+                        self.navigate_to(Path::new(&home));
+                    }
+                } else {
+                    self.sync_path_ui(&curr);
+                }
             }
         }
     }
@@ -510,16 +516,14 @@ impl FinderWindow {
         let target_buf = target.as_ref().to_path_buf();
         self.history.borrow_mut().navigate_to(&target_buf);
         self.coordinator.navigate_to(&target_buf);
-        self.column_container.navigate_root(&target_buf);
-        self.list_view.navigate_root(&target_buf);
+        self.apply_navigation(&target_buf);
     }
 
     /// Navigates back one step in history.
     pub fn go_back(&self) {
         if let Some(target) = self.coordinator.go_back() {
             self.history.borrow_mut().navigate_to(&target);
-            self.column_container.navigate_root(&target);
-            self.list_view.navigate_root(&target);
+            self.apply_navigation(&target);
         }
     }
 
@@ -527,9 +531,32 @@ impl FinderWindow {
     pub fn go_forward(&self) {
         if let Some(target) = self.coordinator.go_forward() {
             self.history.borrow_mut().navigate_to(&target);
-            self.column_container.navigate_root(&target);
-            self.list_view.navigate_root(&target);
+            self.apply_navigation(&target);
         }
+    }
+
+    fn apply_navigation(&self, target: &Path) {
+        if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(target)
+            && let Some(tag_name) =
+                crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(target)
+        {
+            let items = crate::ui::tagging::sidebar_filter::query_tagged_files(&tag_name);
+            self.column_container
+                .navigate_virtual_tag(target, items.clone());
+            self.list_view.set_custom_items(target, items);
+            self.header_bar
+                .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
+            self.breadcrumbs_label
+                .set_text(&format!("Tags › {tag_name}"));
+            self.path_bar.set_tag_filter(&tag_name);
+            let can_back = self.coordinator.can_go_back();
+            let can_forward = self.coordinator.can_go_forward();
+            self.header_bar
+                .update_history_buttons(can_back, can_forward);
+            return;
+        }
+        self.column_container.navigate_root(target);
+        self.list_view.navigate_root(target);
     }
 
     /// Returns the currently active view mode.
@@ -546,19 +573,51 @@ impl FinderWindow {
         self.header_bar.set_view_mode(mode);
 
         let curr = self.coordinator.current_path();
-        match mode {
-            ViewMode::Columns => {
-                self.column_container.navigate_root(&curr);
+        if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
+            if let Some(tag_name) =
+                crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(&curr)
+            {
+                let items = crate::ui::tagging::sidebar_filter::query_tagged_files(&tag_name);
+                match mode {
+                    ViewMode::Columns => {
+                        self.column_container.navigate_virtual_tag(&curr, items);
+                    }
+                    ViewMode::List => {
+                        self.list_view.set_custom_items(&curr, items);
+                    }
+                    ViewMode::Icons => {}
+                }
             }
-            ViewMode::List => {
-                self.list_view.navigate_root(&curr);
+        } else {
+            match mode {
+                ViewMode::Columns => {
+                    self.column_container.navigate_root(&curr);
+                }
+                ViewMode::List => {
+                    self.list_view.navigate_root(&curr);
+                }
+                ViewMode::Icons => {}
             }
-            ViewMode::Icons => {}
         }
     }
 
     /// Synchronizes header bar title, history buttons, and breadcrumb path.
     fn sync_path_ui(&self, path: &Path) {
+        if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(path) {
+            let tag_name = crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(path)
+                .unwrap_or_default();
+            self.header_bar
+                .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
+            self.breadcrumbs_label
+                .set_text(&format!("Tags › {tag_name}"));
+            self.path_bar.set_tag_filter(&tag_name);
+            let can_back = self.coordinator.can_go_back();
+            let can_forward = self.coordinator.can_go_forward();
+            self.header_bar
+                .update_history_buttons(can_back, can_forward);
+            return;
+        }
+
         let title = path.file_name().and_then(|n| n.to_str()).unwrap_or("/");
         self.header_bar.set_title(title, Some("folder-symbolic"));
         self.breadcrumbs_label

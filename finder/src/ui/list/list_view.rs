@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use gdk4::prelude::*;
 use gtk4::prelude::*;
-use shared::models::{FileItem, TagColor};
+use shared::models::FileItem;
 use tokio::sync::mpsc;
 
 use super::keyboard::{ListKeyAction, attach_list_keyboard_controller};
@@ -473,6 +473,21 @@ impl HierarchicalListViewWidget {
         }
     }
 
+    /// Populates the list view with a custom collection of file items (e.g. for virtual tag queries).
+    pub fn set_custom_items(&self, virtual_root: &Path, items: Vec<FileItem>) {
+        self.clear_list_rows();
+        let nodes: Vec<TreeNode> = items
+            .into_iter()
+            .map(|item| TreeNode::new(item, 0))
+            .collect();
+        {
+            let mut model = self.inner.model.borrow_mut();
+            model.root_path = virtual_root.to_path_buf();
+            model.set_root_children(nodes);
+        }
+        self.refresh_rows();
+    }
+
     /// Rebuilds visible rows in the `ListBox` matching the flattened model.
     pub fn refresh_rows(&self) {
         let rows = self.inner.model.borrow().flattened_rows.clone();
@@ -706,24 +721,12 @@ impl HierarchicalListViewWidget {
     }
 
     fn create_tags_cell(node: &TreeNode) -> gtk4::Box {
-        let cell = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .spacing(4)
-            .width_request(COL_WIDTH_TAGS)
-            .css_classes(["dc", "dc-tags"])
-            .halign(gtk4::Align::Start)
-            .valign(gtk4::Align::Center)
-            .build();
-
-        for tag in &node.item.tags {
-            if let Some(color) = tag.color {
-                let dot = gtk4::Box::builder()
-                    .css_classes(["tg", Self::tag_color_css_class(color)])
-                    .build();
-                cell.append(&dot);
-            }
-        }
-        cell
+        let tags = if node.item.tags.is_empty() {
+            crate::ui::tagging::badges::TagBadgeCache::global().get_or_load(&node.path)
+        } else {
+            node.item.tags.clone()
+        };
+        crate::ui::tagging::badges::render_list_view_tags_cell(&tags)
     }
 
     fn format_kind_display(item: &FileItem) -> String {
@@ -746,18 +749,6 @@ impl HierarchicalListViewWidget {
                 _ => classify_kind(item).title,
             },
         )
-    }
-
-    const fn tag_color_css_class(color: TagColor) -> &'static str {
-        match color {
-            TagColor::Red => "red",
-            TagColor::Orange => "orange",
-            TagColor::Yellow => "yellow",
-            TagColor::Green => "green",
-            TagColor::Blue => "blue",
-            TagColor::Purple => "purple",
-            TagColor::Gray => "gray",
-        }
     }
 
     const fn resolve_icon_name(item: &FileItem) -> &'static str {

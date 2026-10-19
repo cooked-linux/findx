@@ -172,6 +172,13 @@ impl ColumnContainer {
         self.push_directory_column(0, root_path);
     }
 
+    /// Navigates the container to a virtual tag directory displaying custom file items.
+    pub fn navigate_virtual_tag(&self, virtual_root: &Path, items: Vec<FileItem>) {
+        self.truncate_all();
+        *self.inner.root_path.borrow_mut() = virtual_root.to_path_buf();
+        self.push_custom_items_column(0, virtual_root, items);
+    }
+
     /// Returns the number of currently active columns in the stack.
     #[must_use]
     pub fn column_count(&self) -> usize {
@@ -441,6 +448,50 @@ impl ColumnContainer {
         let active_col = ActiveColumn::Directory {
             widget,
             watcher_handle: Some(watcher_handle),
+            path: path_buf.clone(),
+        };
+
+        self.inner.columns.borrow_mut().push(active_col);
+        self.emit_path_changed(&path_buf);
+        self.apply_virtualization();
+    }
+
+    fn push_custom_items_column(&self, index: usize, path: &Path, items: Vec<FileItem>) {
+        let width = self.inner.default_column_width.get();
+        let path_buf = path.to_path_buf();
+        let entries: Vec<ColumnEntry> = items
+            .into_iter()
+            .map(|it| ColumnEntry::new(it, false))
+            .collect();
+        let model = ColumnViewModel::new_directory(index, width, path_buf.clone(), entries.clone());
+        let widget = ColumnListWidget::new(model);
+        if let Some(coord) = self.inner.coordinator.borrow().as_ref() {
+            widget.set_coordinator(coord);
+        }
+
+        self.append_divider_if_needed(index, width);
+        self.inner_box.append(&widget.scrolled_window);
+        widget.set_entries(entries, None);
+
+        // Wire selection and activation signals
+        let this_sel = self.clone();
+        widget.connect_item_selected(move |row_idx, _entry| {
+            this_sel.select_item(index, row_idx);
+        });
+
+        let this_act = self.clone();
+        widget.connect_item_activated(move |_row_idx, entry| {
+            if entry.is_dir() {
+                let p = entry.path().to_path_buf();
+                this_act.navigate_root(&p);
+            } else if let Some(ref cb) = *this_act.inner.on_open.borrow() {
+                cb(&entry.item);
+            }
+        });
+
+        let active_col = ActiveColumn::Directory {
+            widget,
+            watcher_handle: None,
             path: path_buf.clone(),
         };
 

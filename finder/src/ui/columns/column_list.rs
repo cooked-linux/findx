@@ -341,6 +341,14 @@ impl ColumnListWidget {
             .build();
         hbox.append(&label);
 
+        let tags = if entry.item.tags.is_empty() {
+            crate::ui::tagging::badges::TagBadgeCache::global().get_or_load(entry.path())
+        } else {
+            entry.item.tags.clone()
+        };
+        let badges = crate::ui::tagging::badges::render_column_badge_cluster(&tags);
+        hbox.append(&badges);
+
         if entry.is_dir() {
             let chevron = gtk4::Label::builder()
                 .label("›")
