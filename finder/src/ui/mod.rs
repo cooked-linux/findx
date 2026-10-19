@@ -7,6 +7,7 @@ pub mod operations;
 pub mod path_bar;
 pub mod quicklook;
 pub mod sidebar;
+pub mod tagging;
 pub mod theme;
 pub mod view_mode;
 pub mod window;

@@ -342,6 +342,7 @@ impl ExtendedAttributesService {
     /// # Errors
     /// Returns [`MetadataError`] if I/O or permissions fail.
     pub fn set_tags_inst(&self, path: &Path, tags: &[FileTag]) -> Result<()> {
+        crate::ui::tagging::badges::invalidate_badge_cache(path);
         if tags.is_empty() {
             self.delete_raw_xattr(path, XATTR_TAGS)?;
             self.delete_raw_xattr(path, XATTR_COLOR)?;

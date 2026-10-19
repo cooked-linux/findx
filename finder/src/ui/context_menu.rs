@@ -112,6 +112,15 @@ pub fn attach_row_context_menu(
         // 6. Get Info
         menu_box.append(&create_menu_button("Get Info", "Ctrl+I", &popover, || {}));
 
+        menu_box.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
+
+        // 7. Color Swatches and Tags
+        let tagging_section = crate::ui::tagging::create_tags_context_menu_widget(
+            std::slice::from_ref(&item_path),
+            &row_widget,
+        );
+        menu_box.append(&tagging_section);
+
         popover.set_child(Some(&menu_box));
         popover.connect_closed(|p| {
             p.unparent();
