@@ -9,6 +9,7 @@ use libadwaita::prelude::*;
 
 use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
+use super::inspector::GetInfoDialog;
 use super::list::HierarchicalListViewWidget;
 use super::operations::{OperationsQueuePopover, TransferProgressDialog};
 use super::path_bar::PathBarWidget;
@@ -54,6 +55,10 @@ pub enum WindowKeyAction {
     PermanentDelete,
     /// Toggle folder size calculation preference (`Ctrl+J`).
     ToggleCalculateAllSizes,
+    /// Open Get Info dialog (`Ctrl+I` or `Cmd+I`).
+    GetInfo,
+    /// Open persistent Quick Inspector (`Ctrl+Alt+I` or `Cmd+Alt+I`).
+    QuickInspector,
 }
 
 /// Maps keyboard shortcut combinations to corresponding [`WindowKeyAction`] variants.
@@ -117,6 +122,9 @@ pub fn map_key_to_window_action(
         if keyval == gdk4::Key::j || keyval == gdk4::Key::J {
             return Some(WindowKeyAction::ToggleCalculateAllSizes);
         }
+        if keyval == gdk4::Key::i || keyval == gdk4::Key::I {
+            return Some(WindowKeyAction::GetInfo);
+        }
     }
 
     if !ctrl
@@ -139,6 +147,13 @@ pub fn map_key_to_window_action(
         if keyval == gdk4::Key::p || keyval == gdk4::Key::P {
             return Some(WindowKeyAction::TogglePathBar);
         }
+        if keyval == gdk4::Key::i || keyval == gdk4::Key::I {
+            return Some(WindowKeyAction::QuickInspector);
+        }
+    }
+
+    if super_key && !ctrl && !alt && !shift && (keyval == gdk4::Key::i || keyval == gdk4::Key::I) {
+        return Some(WindowKeyAction::GetInfo);
     }
 
     None
@@ -454,7 +469,29 @@ impl FinderWindow {
             WindowKeyAction::ToggleCalculateAllSizes => {
                 self.toggle_calculate_all_sizes();
             }
+            WindowKeyAction::GetInfo => {
+                let _ = self.open_get_info();
+            }
+            WindowKeyAction::QuickInspector => {
+                let _ = self.open_quick_inspector();
+            }
         }
+    }
+
+    /// Opens the modal Get Info dialog for the active selection.
+    #[must_use]
+    pub fn open_get_info(&self) -> GetInfoDialog {
+        let paths = self
+            .coordinator
+            .selection()
+            .map_or_else(|| vec![self.coordinator.current_path()], |sel| vec![sel]);
+        GetInfoDialog::open_for_paths(Some(&self.window), paths)
+    }
+
+    /// Opens or updates the floating persistent inspector.
+    #[must_use]
+    pub fn open_quick_inspector(&self) -> GetInfoDialog {
+        GetInfoDialog::open_persistent(Some(&self.window), Some(Rc::clone(&self.coordinator)))
     }
 
     /// Toggles the sidebar visibility and persists the state.
