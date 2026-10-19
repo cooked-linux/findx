@@ -481,17 +481,20 @@ impl FinderWindow {
     /// Opens the modal Get Info dialog for the active selection.
     #[must_use]
     pub fn open_get_info(&self) -> GetInfoDialog {
-        let paths = self
-            .coordinator
-            .selection()
-            .map_or_else(|| vec![self.coordinator.current_path()], |sel| vec![sel]);
-        GetInfoDialog::open_for_paths(Some(&self.window), paths)
+        self.coordinator.open_get_info(Some(&self.window))
     }
 
     /// Opens or updates the floating persistent inspector.
     #[must_use]
     pub fn open_quick_inspector(&self) -> GetInfoDialog {
-        GetInfoDialog::open_persistent(Some(&self.window), Some(Rc::clone(&self.coordinator)))
+        self.coordinator
+            .toggle_persistent_inspector(Some(&self.window))
+            .unwrap_or_else(|| {
+                GetInfoDialog::open_persistent(
+                    Some(&self.window),
+                    Some(Rc::clone(&self.coordinator)),
+                )
+            })
     }
 
     /// Toggles the sidebar visibility and persists the state.
@@ -680,6 +683,26 @@ impl FinderWindow {
             .connect_selection_changed(move |selection| {
                 let curr = win.coordinator.current_path();
                 win.path_bar.set_path(&curr, selection);
+
+                let selected = win.coordinator.selected_paths();
+
+                // Live selection tracking for Quick Look
+                if let Some(ql) = win.coordinator.quicklook_window.borrow().as_ref()
+                    && ql.window.is_visible()
+                {
+                    if let Some(first_path) = selected.first() {
+                        ql.update_active_file(first_path);
+                    } else {
+                        ql.dismiss();
+                    }
+                }
+
+                // Live selection tracking for persistent inspector
+                if let Some(dialog) = win.coordinator.persistent_inspector.borrow().as_ref()
+                    && dialog.window.is_visible()
+                {
+                    dialog.update_selection(&selected);
+                }
             });
     }
 
@@ -737,14 +760,55 @@ impl FinderWindow {
             let new_win = Self::with_initial_path(None, path);
             new_win.present();
         });
+
+        let win = self.clone();
+        self.header_bar.connect_quicklook(move || {
+            win.coordinator.toggle_quicklook(Some(&win.window));
+        });
+
+        let win = self.clone();
+        self.header_bar.connect_get_info(move || {
+            let _ = win.coordinator.open_get_info(Some(&win.window));
+        });
     }
 
     /// Binds global keyboard shortcuts on the window via [`gtk4::EventControllerKey`].
     fn wire_keyboard_shortcuts(&self) {
         let controller = gtk4::EventControllerKey::new();
+        controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let win = self.clone();
 
         controller.connect_key_pressed(move |_ctrl, keyval, _code, state| {
+            // Spacebar: Toggle Quick Look preview unless a text entry or text view is focused
+            if keyval == gdk4::Key::space {
+                if let Some(focus) = GtkWindowExt::focus(&win.window)
+                    && (focus.is::<gtk4::Entry>()
+                        || focus.is::<gtk4::SearchEntry>()
+                        || focus.is::<gtk4::TextView>()
+                        || focus.is::<gtk4::Editable>())
+                {
+                    return glib::Propagation::Proceed;
+                }
+                win.coordinator.toggle_quicklook(Some(&win.window));
+                return glib::Propagation::Stop;
+            }
+
+            // Ctrl+I / Cmd+I: Get Info or Persistent Inspector
+            let ctrl = state.contains(gdk4::ModifierType::CONTROL_MASK)
+                || state.contains(gdk4::ModifierType::SUPER_MASK)
+                || state.contains(gdk4::ModifierType::META_MASK);
+            let alt = state.contains(gdk4::ModifierType::ALT_MASK);
+
+            if ctrl && (keyval == gdk4::Key::i || keyval == gdk4::Key::I) {
+                if alt {
+                    win.coordinator
+                        .toggle_persistent_inspector(Some(&win.window));
+                } else {
+                    let _ = win.coordinator.open_get_info(Some(&win.window));
+                }
+                return glib::Propagation::Stop;
+            }
+
             map_key_to_window_action(keyval, state).map_or(glib::Propagation::Proceed, |action| {
                 win.handle_action(action);
                 glib::Propagation::Stop

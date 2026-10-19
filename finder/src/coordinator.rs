@@ -4,8 +4,13 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use gtk4::prelude::*;
+
 use crate::history::NavigationHistory;
 use crate::operations::{FolderSizeManager, OperationsQueue};
+use crate::quicklook::QuickLookEngine;
+use crate::ui::inspector::GetInfoDialog;
+use crate::ui::quicklook::QuickLookWindow;
 use crate::ui::view_mode::ViewMode;
 use crate::undo::{UndoError, UndoManager, UndoTransaction};
 use shared::models::operation::{BatchOperation, OperationKind};
@@ -37,6 +42,14 @@ pub struct NavigationCoordinator {
     pub on_selection_changed: RefCell<Vec<SelectionChangedCallback>>,
     /// Current selected item or directory leaf, if any.
     pub active_selection: RefCell<Option<PathBuf>>,
+    /// All currently selected filesystem paths supporting multi-selection.
+    pub active_selection_paths: RefCell<Vec<PathBuf>>,
+    /// Headless preview generation engine.
+    pub quicklook_engine: Arc<QuickLookEngine>,
+    /// Active floating Quick Look preview window instance, if any.
+    pub quicklook_window: RefCell<Option<QuickLookWindow>>,
+    /// Active floating persistent inspector dialog instance, if any.
+    pub persistent_inspector: RefCell<Option<GetInfoDialog>>,
     /// Background operations queue for batch copy, move, trash, and delete tasks.
     pub operations_queue: Arc<OperationsQueue>,
     /// Transactional undo and redo manager.
@@ -53,6 +66,15 @@ impl std::fmt::Debug for NavigationCoordinator {
             .field("history", &self.history)
             .field("current_mode", &self.current_mode)
             .field("active_selection", &self.active_selection)
+            .field("active_selection_paths", &self.active_selection_paths)
+            .field(
+                "quicklook_window_active",
+                &self.quicklook_window.borrow().is_some(),
+            )
+            .field(
+                "persistent_inspector_active",
+                &self.persistent_inspector.borrow().is_some(),
+            )
             .field("operations_queue", &self.operations_queue)
             .field("undo_manager", &self.undo_manager)
             .field("folder_size_manager", &self.folder_size_manager)
@@ -65,7 +87,7 @@ impl std::fmt::Debug for NavigationCoordinator {
                 "on_selection_changed_count",
                 &self.on_selection_changed.borrow().len(),
             )
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -84,6 +106,10 @@ impl NavigationCoordinator {
             on_path_changed: RefCell::new(Vec::new()),
             on_selection_changed: RefCell::new(Vec::new()),
             active_selection: RefCell::new(None),
+            active_selection_paths: RefCell::new(Vec::new()),
+            quicklook_engine: Arc::new(QuickLookEngine::new()),
+            quicklook_window: RefCell::new(None),
+            persistent_inspector: RefCell::new(None),
             operations_queue,
             undo_manager,
             folder_size_manager,
@@ -165,6 +191,7 @@ impl NavigationCoordinator {
 
         self.history.borrow_mut().navigate_to(target_path);
         *self.active_selection.borrow_mut() = None;
+        self.active_selection_paths.borrow_mut().clear();
 
         self.dispatch_path_changed(target_path);
         self.dispatch_selection_changed(None);
@@ -174,6 +201,7 @@ impl NavigationCoordinator {
     pub fn go_back(&self) -> Option<PathBuf> {
         let prev = self.history.borrow_mut().go_back()?;
         *self.active_selection.borrow_mut() = None;
+        self.active_selection_paths.borrow_mut().clear();
 
         self.dispatch_path_changed(&prev);
         self.dispatch_selection_changed(None);
@@ -184,6 +212,7 @@ impl NavigationCoordinator {
     pub fn go_forward(&self) -> Option<PathBuf> {
         let next = self.history.borrow_mut().go_forward()?;
         *self.active_selection.borrow_mut() = None;
+        self.active_selection_paths.borrow_mut().clear();
 
         self.dispatch_path_changed(&next);
         self.dispatch_selection_changed(None);
@@ -198,7 +227,96 @@ impl NavigationCoordinator {
         }
 
         *self.active_selection.borrow_mut() = item.map(Path::to_path_buf);
+        *self.active_selection_paths.borrow_mut() =
+            item.map_or_else(Vec::new, |p| vec![p.to_path_buf()]);
         self.dispatch_selection_changed(item);
+    }
+
+    /// Returns all currently selected items in the active view.
+    #[must_use]
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        let paths = self.active_selection_paths.borrow().clone();
+        if !paths.is_empty() {
+            paths
+        } else if let Some(sel) = self.active_selection.borrow().clone() {
+            vec![sel]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Updates the selection buffer with multiple selected paths and dispatches selection notifications.
+    pub fn set_selected_paths(&self, paths: Vec<PathBuf>) {
+        *self.active_selection.borrow_mut() = paths.first().cloned();
+        *self.active_selection_paths.borrow_mut() = paths;
+        let sel_ref = self.active_selection.borrow();
+        self.dispatch_selection_changed(sel_ref.as_deref());
+    }
+
+    /// Toggles the floating Quick Look preview window.
+    pub fn toggle_quicklook(&self, parent: Option<&impl IsA<gtk4::Window>>) {
+        let mut ql_slot = self.quicklook_window.borrow_mut();
+        if let Some(ql) = ql_slot.as_ref()
+            && ql.window.is_visible()
+        {
+            ql.dismiss();
+            return;
+        }
+
+        let paths = self.selected_paths();
+        if paths.is_empty() {
+            return;
+        }
+
+        if let Some(ql) = ql_slot.as_ref() {
+            if let Some(p) = parent {
+                ql.window
+                    .set_transient_for(Some(p.upcast_ref::<gtk4::Window>()));
+            }
+            ql.show_preview(paths, 0);
+        } else {
+            let ql = QuickLookWindow::new(parent, Arc::clone(&self.quicklook_engine));
+            ql.show_preview(paths, 0);
+            *ql_slot = Some(ql);
+        }
+    }
+
+    /// Opens the Get Info metadata summary inspector dialog for the active selection.
+    pub fn open_get_info(&self, parent: Option<&impl IsA<gtk4::Window>>) -> GetInfoDialog {
+        let paths = self.selected_paths();
+        let target_paths = if paths.is_empty() {
+            vec![self.current_path()]
+        } else {
+            paths
+        };
+        GetInfoDialog::open_for_paths(parent, target_paths)
+    }
+
+    /// Toggles the floating persistent Quick Inspector window.
+    pub fn toggle_persistent_inspector(
+        &self,
+        parent: Option<&impl IsA<gtk4::Window>>,
+    ) -> Option<GetInfoDialog> {
+        let mut inspector_slot = self.persistent_inspector.borrow_mut();
+        if let Some(dialog) = inspector_slot.as_ref()
+            && dialog.window.is_visible()
+        {
+            dialog.window.close();
+            *inspector_slot = None;
+            return None;
+        }
+
+        let paths = self.selected_paths();
+        let target_paths = if paths.is_empty() {
+            vec![self.current_path()]
+        } else {
+            paths
+        };
+        let dialog = GetInfoDialog::new(crate::ui::inspector::InspectorMode::Persistent, parent);
+        dialog.rebind_target(&target_paths);
+        dialog.window.present();
+        *inspector_slot = Some(dialog.clone());
+        Some(dialog)
     }
 
     fn dispatch_path_changed(&self, path: &Path) {

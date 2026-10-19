@@ -107,7 +107,7 @@ impl HierarchicalListViewWidget {
         container.append(&header_box);
 
         let list_box = gtk4::ListBox::builder()
-            .selection_mode(gtk4::SelectionMode::Single)
+            .selection_mode(gtk4::SelectionMode::Multiple)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -804,15 +804,27 @@ impl HierarchicalListViewWidget {
 
     fn wire_list_signals(&self) {
         let this = self.clone();
-        self.list_box.connect_row_selected(move |_lb, maybe_row| {
-            if let Some(row) = maybe_row
-                && let Ok(idx) = usize::try_from(row.index())
-            {
-                this.inner.selected_index.set(Some(idx));
-                this.update_row_selection_styles(Some(idx));
-            } else if maybe_row.is_none() {
-                this.inner.selected_index.set(None);
-                this.update_row_selection_styles(None);
+        self.list_box.connect_selected_rows_changed(move |lb| {
+            let selected_rows = lb.selected_rows();
+            let model = this.inner.model.borrow();
+            let mut paths = Vec::new();
+            let mut last_idx = None;
+
+            for row in &selected_rows {
+                if let Ok(idx) = usize::try_from(row.index()) {
+                    last_idx = Some(idx);
+                    if let Some(node) = model.row_at(idx) {
+                        paths.push(node.path.clone());
+                    }
+                }
+            }
+            drop(model);
+
+            this.inner.selected_index.set(last_idx);
+            this.update_row_selection_styles(last_idx);
+
+            if let Some(coord) = this.inner.coordinator.borrow().as_ref() {
+                coord.set_selected_paths(paths);
             }
         });
 
@@ -831,6 +843,18 @@ impl HierarchicalListViewWidget {
                 }
             }
         });
+    }
+
+    /// Returns the paths of all currently selected items in the list view.
+    #[must_use]
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        let selected_rows = self.list_box.selected_rows();
+        let model = self.inner.model.borrow();
+        selected_rows
+            .into_iter()
+            .filter_map(|row| usize::try_from(row.index()).ok())
+            .filter_map(|idx| model.row_at(idx).map(|node| node.path.clone()))
+            .collect()
     }
 
     fn wire_keyboard_navigation(&self) {
