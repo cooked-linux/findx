@@ -281,16 +281,7 @@ pub fn create_tags_context_menu_widget<W: IsA<gtk4::Widget>>(
 )]
 mod tests {
     use super::*;
-    use crate::ui::tagging::GTK_TEST_MUTEX;
     use tempfile::NamedTempFile;
-
-    fn ensure_gtk() -> bool {
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return false;
-        }
-        true
-    }
 
     #[test]
     fn test_multi_selection_summary_computation() {
@@ -371,20 +362,5 @@ mod tests {
             let tags = crate::metadata::ExtendedAttributesService::get_tags(path).unwrap();
             assert!(!tags.iter().any(|t| t.name == "Project-Omega"));
         }
-    }
-
-    #[test]
-    fn test_context_menu_widget_creation() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-
-        let file = NamedTempFile::new().unwrap();
-        let paths = vec![file.path().to_path_buf()];
-        let dummy_row = gtk4::ListBoxRow::new();
-
-        let widget = create_tags_context_menu_widget(&paths, &dummy_row);
-        assert!(widget.first_child().is_some());
     }
 }

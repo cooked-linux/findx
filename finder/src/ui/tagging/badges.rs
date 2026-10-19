@@ -281,16 +281,7 @@ impl TagBadgeView {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::ui::tagging::GTK_TEST_MUTEX;
     use tempfile::NamedTempFile;
-
-    fn ensure_gtk() -> bool {
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return false;
-        }
-        true
-    }
 
     #[test]
     fn test_cache_insertion_retrieval_and_invalidation() {
@@ -317,79 +308,5 @@ mod tests {
         cache.invalidate(&path);
         let miss = cache.get(&path, mtime);
         assert_eq!(miss, None);
-    }
-
-    #[test]
-    fn test_column_badge_cluster_dom() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-
-        // Empty tags
-        let empty_box = render_column_badge_cluster(&[]);
-        assert!(empty_box.first_child().is_none());
-
-        // 3 tags -> 3 dots
-        let tags_3 = vec![
-            FileTag::new("1", Some(TagColor::Red)),
-            FileTag::new("2", Some(TagColor::Green)),
-            FileTag::new("3", Some(TagColor::Blue)),
-        ];
-        let box_3 = render_column_badge_cluster(&tags_3);
-        let mut count = 0;
-        let mut curr = box_3.first_child();
-        while let Some(c) = curr {
-            count += 1;
-            curr = c.next_sibling();
-        }
-        assert_eq!(count, 3);
-
-        // 5 tags -> 2 dots + 1 count label ("+3")
-        let tags_5 = vec![
-            FileTag::new("1", Some(TagColor::Red)),
-            FileTag::new("2", Some(TagColor::Green)),
-            FileTag::new("3", Some(TagColor::Blue)),
-            FileTag::new("4", Some(TagColor::Yellow)),
-            FileTag::new("5", Some(TagColor::Orange)),
-        ];
-        let box_5 = render_column_badge_cluster(&tags_5);
-        let mut count_5 = 0;
-        let mut curr_5 = box_5.first_child();
-        let mut last_widget = None;
-        while let Some(c) = curr_5 {
-            count_5 += 1;
-            last_widget = Some(c.clone());
-            curr_5 = c.next_sibling();
-        }
-        assert_eq!(count_5, 3); // 2 dots + 1 label
-        if let Some(w) = last_widget {
-            let lbl = w.downcast::<gtk4::Label>().unwrap();
-            assert_eq!(lbl.label(), "+3");
-        }
-    }
-
-    #[test]
-    fn test_list_view_tags_cell() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-
-        let empty = render_list_view_tags_cell(&[]);
-        assert!(empty.first_child().is_none());
-
-        let tags = vec![
-            FileTag::new("Work", Some(TagColor::Red)),
-            FileTag::new("Home", None),
-        ];
-        let cell = render_list_view_tags_cell(&tags);
-        let mut count = 0;
-        let mut curr = cell.first_child();
-        while let Some(c) = curr {
-            count += 1;
-            curr = c.next_sibling();
-        }
-        assert_eq!(count, 2);
     }
 }

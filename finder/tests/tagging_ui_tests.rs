@@ -122,6 +122,19 @@ fn test_tagging_ui_widgets_instantiation() {
         swatch_bar.get_color_state(TagColor::Blue),
         SwatchState::Partial
     );
+    swatch_bar.set_active_colors(&[TagColor::Green], &[TagColor::Yellow]);
+    assert_eq!(
+        swatch_bar.get_color_state(TagColor::Green),
+        SwatchState::Active
+    );
+    assert_eq!(
+        swatch_bar.get_color_state(TagColor::Yellow),
+        SwatchState::Partial
+    );
+    assert_eq!(
+        swatch_bar.get_color_state(TagColor::Red),
+        SwatchState::Inactive
+    );
 
     // 2. TagPillEditor
     let pill_editor = TagPillEditor::new();
@@ -130,12 +143,61 @@ fn test_tagging_ui_widgets_instantiation() {
     assert_eq!(pills.len(), 1);
     assert_eq!(pills[0].name, "Important");
 
-    // 3. TagBadgeView
+    pill_editor.entry.set_text("Urgent, Invoices");
+    pill_editor.commit_entry_text();
+    assert_eq!(pill_editor.get_tags().len(), 3);
+    assert_eq!(pill_editor.entry.text(), "");
+
+    pill_editor.remove_tag("Important");
+    assert_eq!(pill_editor.get_tags().len(), 2);
+    let removed = pill_editor.remove_last_tag();
+    assert_eq!(removed.as_deref(), Some("Invoices"));
+    pill_editor.clear();
+    assert_eq!(pill_editor.get_tags().len(), 0);
+
+    // 3. TagBadgeView and DOM clusters
     let badge_view = TagBadgeView::new_column_cluster(&[
         FileTag::new("Alpha", Some(TagColor::Red)),
         FileTag::new("Beta", Some(TagColor::Green)),
     ]);
     badge_view.update(&[FileTag::new("Gamma", Some(TagColor::Blue))]);
+
+    let empty_cluster = finder::ui::tagging::render_column_badge_cluster(&[]);
+    assert!(empty_cluster.first_child().is_none());
+
+    let tags_5 = vec![
+        FileTag::new("1", Some(TagColor::Red)),
+        FileTag::new("2", Some(TagColor::Green)),
+        FileTag::new("3", Some(TagColor::Blue)),
+        FileTag::new("4", Some(TagColor::Yellow)),
+        FileTag::new("5", Some(TagColor::Orange)),
+    ];
+    let cluster_5 = finder::ui::tagging::render_column_badge_cluster(&tags_5);
+    let mut count_5 = 0;
+    let mut curr_5 = cluster_5.first_child();
+    let mut last_widget = None;
+    while let Some(c) = curr_5 {
+        count_5 += 1;
+        last_widget = Some(c.clone());
+        curr_5 = c.next_sibling();
+    }
+    assert_eq!(count_5, 3);
+    if let Some(w) = last_widget {
+        let lbl = w.downcast::<gtk4::Label>().unwrap();
+        assert_eq!(lbl.label(), "+3");
+    }
+
+    let cell = finder::ui::tagging::render_list_view_tags_cell(&[
+        FileTag::new("Work", Some(TagColor::Red)),
+        FileTag::new("Home", None),
+    ]);
+    let mut cell_count = 0;
+    let mut cell_curr = cell.first_child();
+    while let Some(c) = cell_curr {
+        cell_count += 1;
+        cell_curr = c.next_sibling();
+    }
+    assert_eq!(cell_count, 2);
 
     // 4. Context Menu Widget
     let f1 = NamedTempFile::new().unwrap();

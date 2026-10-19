@@ -200,17 +200,6 @@ impl ColorSwatchBar {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::ui::tagging::GTK_TEST_MUTEX;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    fn ensure_gtk() -> bool {
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return false;
-        }
-        true
-    }
 
     #[test]
     fn test_swatch_colors_count_and_mapping() {
@@ -227,73 +216,5 @@ mod tests {
             ColorSwatchBar::color_css_class(TagColor::Gray),
             "tag-color-gray"
         );
-    }
-
-    #[test]
-    fn test_swatch_state_transitions() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-        let bar = ColorSwatchBar::new();
-
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Inactive);
-        assert!(!bar.is_color_active(TagColor::Red));
-
-        bar.set_color_state(TagColor::Red, SwatchState::Active);
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Active);
-        assert!(bar.is_color_active(TagColor::Red));
-
-        bar.set_color_state(TagColor::Red, SwatchState::Partial);
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Partial);
-        assert!(bar.is_color_active(TagColor::Red));
-
-        bar.clear_states();
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Inactive);
-    }
-
-    #[test]
-    fn test_bulk_active_and_partial_colors() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-        let bar = ColorSwatchBar::new();
-
-        let full = [TagColor::Green, TagColor::Blue];
-        let partial = [TagColor::Yellow];
-
-        bar.set_active_colors(&full, &partial);
-
-        assert_eq!(bar.get_color_state(TagColor::Green), SwatchState::Active);
-        assert_eq!(bar.get_color_state(TagColor::Blue), SwatchState::Active);
-        assert_eq!(bar.get_color_state(TagColor::Yellow), SwatchState::Partial);
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Inactive);
-    }
-
-    #[test]
-    fn test_callback_invocations() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-        let bar = ColorSwatchBar::new();
-
-        let triggered = Arc::new(AtomicBool::new(false));
-        let triggered_clone = Arc::clone(&triggered);
-
-        bar.connect_color_toggled(move |color, active| {
-            if color == TagColor::Red && active {
-                triggered_clone.store(true, Ordering::SeqCst);
-            }
-        });
-
-        // Simulate button click
-        if let Some(btn) = bar.buttons.get(&TagColor::Red) {
-            btn.emit_clicked();
-        }
-
-        assert!(triggered.load(Ordering::SeqCst));
-        assert_eq!(bar.get_color_state(TagColor::Red), SwatchState::Active);
     }
 }

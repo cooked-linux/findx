@@ -642,16 +642,7 @@ impl TagPillEditor {
 )]
 mod tests {
     use super::*;
-    use crate::ui::tagging::GTK_TEST_MUTEX;
     use rusqlite::Connection;
-
-    fn ensure_gtk() -> bool {
-        if !gtk4::is_initialized_main_thread() && (gtk4::is_initialized() || gtk4::init().is_err())
-        {
-            return false;
-        }
-        true
-    }
 
     #[test]
     fn test_tokenize_tag_input_single_and_multiple() {
@@ -727,42 +718,5 @@ mod tests {
 
         let red = query_autocomplete_from_db(&conn, "re");
         assert!(red.iter().any(|s| s.name == "Red"));
-    }
-
-    #[test]
-    fn test_tag_pill_editor_state_and_token_commit() {
-        let _lock = GTK_TEST_MUTEX.lock().unwrap();
-        if !ensure_gtk() {
-            return;
-        }
-
-        let editor = TagPillEditor::new();
-        assert_eq!(editor.get_tags().len(), 0);
-
-        editor.add_tag(&FileTag::new("Work", Some(TagColor::Red)));
-        assert_eq!(editor.get_tags().len(), 1);
-        assert_eq!(editor.get_tags()[0].name, "Work");
-
-        // Duplicate rejection
-        editor.add_tag(&FileTag::new("work", None));
-        assert_eq!(editor.get_tags().len(), 1);
-
-        editor.entry.set_text("Urgent, Invoices");
-        editor.commit_entry_text();
-        assert_eq!(editor.get_tags().len(), 3);
-        assert_eq!(editor.entry.text(), "");
-
-        // Removal
-        editor.remove_tag("Work");
-        assert_eq!(editor.get_tags().len(), 2);
-        assert!(!editor.get_tags().iter().any(|t| t.name == "Work"));
-
-        // Remove last tag
-        let removed = editor.remove_last_tag();
-        assert_eq!(removed.as_deref(), Some("Invoices"));
-        assert_eq!(editor.get_tags().len(), 1);
-
-        editor.clear();
-        assert_eq!(editor.get_tags().len(), 0);
     }
 }

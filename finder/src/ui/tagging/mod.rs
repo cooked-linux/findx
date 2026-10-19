@@ -22,6 +22,3 @@ pub use sidebar_filter::{
 };
 pub use swatches::{ColorSwatchBar, ColorToggledCallback, SwatchState};
 pub use theme::{TAGGING_CSS, install_tagging_theme};
-
-#[cfg(test)]
-pub static GTK_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
