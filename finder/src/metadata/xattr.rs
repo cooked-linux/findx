@@ -29,6 +29,8 @@ pub const XATTR_ORIGIN_REFERRER: &str = "user.xdg.origin.referrer";
 pub const XATTR_TAGS: &str = "user.xdg.tags";
 /// Canonical attribute key for color labels.
 pub const XATTR_COLOR: &str = "user.xdg.color";
+/// Canonical attribute key for hiding file extension.
+pub const XATTR_HIDE_EXTENSION: &str = "user.xdg.hide_extension";
 
 static OVERRIDE_FALLBACK_DB_PATH: OnceLock<PathBuf> = OnceLock::new();
 
@@ -362,6 +364,27 @@ impl ExtendedAttributesService {
         Ok(())
     }
 
+    /// Reads the extension hiding preference from `user.xdg.hide_extension`.
+    ///
+    /// # Errors
+    /// Returns [`MetadataError`] if I/O or permissions fail.
+    pub fn get_hide_extension_inst(&self, path: &Path) -> Result<bool> {
+        let val = self.read_raw_xattr(path, XATTR_HIDE_EXTENSION)?;
+        Ok(val.is_some_and(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true")))
+    }
+
+    /// Sets or removes the extension hiding preference stored in `user.xdg.hide_extension`.
+    ///
+    /// # Errors
+    /// Returns [`MetadataError`] if I/O or permissions fail.
+    pub fn set_hide_extension_inst(&self, path: &Path, hide: bool) -> Result<()> {
+        if hide {
+            self.write_raw_xattr(path, XATTR_HIDE_EXTENSION, "1")
+        } else {
+            self.delete_raw_xattr(path, XATTR_HIDE_EXTENSION)
+        }
+    }
+
     /// Reads all extended attributes and aggregates them into [`ExtendedAttrsMeta`].
     ///
     /// # Errors
@@ -431,6 +454,22 @@ impl ExtendedAttributesService {
     /// Returns [`MetadataError`] if I/O or permissions fail.
     pub fn set_tags(path: &Path, tags: &[FileTag]) -> Result<()> {
         Self::new().set_tags_inst(path, tags)
+    }
+
+    /// Reads extension hiding preference using default service configuration.
+    ///
+    /// # Errors
+    /// Returns [`MetadataError`] if I/O or permissions fail.
+    pub fn get_hide_extension(path: &Path) -> Result<bool> {
+        Self::new().get_hide_extension_inst(path)
+    }
+
+    /// Sets extension hiding preference using default service configuration.
+    ///
+    /// # Errors
+    /// Returns [`MetadataError`] if I/O or permissions fail.
+    pub fn set_hide_extension(path: &Path, hide: bool) -> Result<()> {
+        Self::new().set_hide_extension_inst(path, hide)
     }
 
     /// Aggregates all extended attributes using default service configuration.
