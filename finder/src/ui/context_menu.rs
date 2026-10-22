@@ -14,7 +14,7 @@ use crate::coordinator::NavigationCoordinator;
 /// to a file or directory row widget.
 #[allow(clippy::too_many_lines)]
 pub fn attach_row_context_menu(
-    row: &gtk4::ListBoxRow,
+    row: &impl IsA<gtk4::Widget>,
     path: &Path,
     is_directory: bool,
     coordinator: &Rc<NavigationCoordinator>,
@@ -22,7 +22,7 @@ pub fn attach_row_context_menu(
     let click_gesture = gtk4::GestureClick::new();
     click_gesture.set_button(gdk4::BUTTON_SECONDARY);
 
-    let row_weak = row.downgrade();
+    let row_weak = row.upcast_ref::<gtk4::Widget>().downgrade();
     let coord = Rc::clone(coordinator);
     let item_path = path.to_path_buf();
 
@@ -210,7 +210,7 @@ pub fn attach_row_context_menu(
 /// Attaches a GTK4 [`DropTarget`] to a directory row widget, determining whether source and
 /// target are on the same filesystem and scheduling `Move` or `Copy` operations.
 pub fn attach_directory_drop_target(
-    row: &gtk4::ListBoxRow,
+    row: &impl IsA<gtk4::Widget>,
     target_dir: &Path,
     coordinator: &Rc<NavigationCoordinator>,
 ) {
@@ -219,7 +219,8 @@ pub fn attach_directory_drop_target(
         gdk4::DragAction::COPY | gdk4::DragAction::MOVE,
     );
 
-    let row_weak = row.downgrade();
+    let row_widget = row.upcast_ref::<gtk4::Widget>();
+    let row_weak = row_widget.downgrade();
     drop_target.connect_enter(move |_dt, _x, _y| {
         if let Some(r) = row_weak.upgrade() {
             r.add_css_class("drop-target");
@@ -227,14 +228,14 @@ pub fn attach_directory_drop_target(
         gdk4::DragAction::COPY
     });
 
-    let row_weak_leave = row.downgrade();
+    let row_weak_leave = row_widget.downgrade();
     drop_target.connect_leave(move |_dt| {
         if let Some(r) = row_weak_leave.upgrade() {
             r.remove_css_class("drop-target");
         }
     });
 
-    let row_weak_drop = row.downgrade();
+    let row_weak_drop = row_widget.downgrade();
     let coord = Rc::clone(coordinator);
     let dest_path = target_dir.to_path_buf();
 

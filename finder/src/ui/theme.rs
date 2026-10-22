@@ -520,6 +520,50 @@ pub const FINDER_CSS: &str = r"
     background-color: var(--ac);
     color: #ffffff;
 }
+
+/* Icon Grid View */
+.icon-grid-view {
+    background-color: transparent;
+}
+.icon-grid-flowbox {
+    background-color: transparent;
+}
+.icon-grid-flowbox flowboxchild {
+    padding: 6px;
+    border-radius: 8px;
+    background-color: transparent;
+}
+.icon-grid-flowbox flowboxchild:selected {
+    background-color: transparent;
+}
+.icon-card {
+    border-radius: 8px;
+    padding: 8px 4px;
+    transition: background-color 100ms ease;
+}
+.icon-card:hover {
+    background-color: var(--hv);
+}
+.icon-card-image {
+    color: var(--tx);
+}
+.icon-card-image.fi {
+    color: #4ea1f0;
+}
+.icon-card-image.fl {
+    color: var(--mu);
+}
+.icon-card-label {
+    font-size: 12px;
+    color: var(--tx);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-top: 4px;
+}
+.icon-grid-flowbox flowboxchild:selected .icon-card-label {
+    background-color: var(--ac);
+    color: #ffffff;
+}
 ";
 
 /// Installs the Finder CSS stylesheet onto the default display.

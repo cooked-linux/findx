@@ -119,6 +119,16 @@ impl FinderApp {
         let windows: Rc<RefCell<Vec<FinderWindow>>> = Rc::new(RefCell::new(Vec::new()));
         let dbus_handle = Rc::new(RefCell::new(None));
 
+        let new_smart_folder_action = gio::SimpleAction::new("new-smart-folder", None);
+        let windows_for_action = Rc::clone(&windows);
+        new_smart_folder_action.connect_activate(move |_, _| {
+            if let Some(win) = windows_for_action.borrow().last() {
+                win.open_new_smart_folder();
+            }
+        });
+        app.add_action(&new_smart_folder_action);
+        app.set_accels_for_action("app.new-smart-folder", &["<Primary><Alt>n"]);
+
         // Load persistent undo journal if available, falling back to clean manager
         let journal_path = default_journal_path();
         let undo_manager = Arc::new(Mutex::new(

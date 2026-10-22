@@ -1,6 +1,7 @@
 //! Finder 210px persistent sidebar widget with categorized sections and live volume monitoring.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -12,6 +13,7 @@ use crate::bookmarks::{BookmarkEntry, load_user_bookmarks, save_user_bookmarks};
 use crate::sidebar::config::SidebarConfig;
 use crate::sidebar::tags::{MACOS_TAG_PALETTE, TagFilterEvent, load_user_tags};
 use crate::sidebar::volumes::{DiscoveredVolume, VolumeService};
+use crate::smart_folders::{list_saved_searches, resolve_storage_dir};
 
 /// Callback signature for path navigation events.
 pub type NavigateCallback = Box<dyn Fn(PathBuf) + 'static>;
@@ -211,7 +213,16 @@ impl SidebarWidget {
         clear_box_children(&self.favorites_box);
         self.favorite_rows.borrow_mut().clear();
 
-        let bookmarks = load_user_bookmarks();
+        let mut bookmarks = load_user_bookmarks();
+        let mut known: HashSet<PathBuf> = bookmarks.iter().map(|b| b.path.clone()).collect();
+        if let Ok(saved) = list_saved_searches(&resolve_storage_dir()) {
+            for (path, definition) in saved {
+                if known.insert(path.clone()) {
+                    bookmarks.push(BookmarkEntry::from_path(path, Some(definition.name)));
+                }
+            }
+        }
+
         for (index, b) in bookmarks.iter().enumerate() {
             let row = self.create_favorite_row(index, b);
             self.favorites_box.append(&row);

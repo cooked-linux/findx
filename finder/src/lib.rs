@@ -12,6 +12,7 @@ pub mod operations;
 pub mod quicklook;
 pub mod service;
 pub mod sidebar;
+pub mod smart_folders;
 pub mod sorting;
 pub mod ui;
 pub mod undo;

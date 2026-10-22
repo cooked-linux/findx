@@ -1,26 +1,35 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
+use shared::models::FileItem;
 
 use super::columns::ColumnContainer;
 use super::header_bar::FinderHeaderBar;
+use super::icons::IconGridViewWidget;
 use super::inspector::GetInfoDialog;
 use super::list::HierarchicalListViewWidget;
 use super::operations::{OperationsQueuePopover, TransferProgressDialog};
 use super::path_bar::PathBarWidget;
 use super::sidebar::SidebarWidget;
+use super::smart_folder_bar::{CRITERIA_DEBOUNCE, SmartFolderBar};
 use super::theme::{apply_theme_classes, install_finder_theme};
 use super::view_mode::ViewMode;
 use crate::breadcrumbs::FinderPreferences;
 use crate::coordinator::NavigationCoordinator;
+use crate::grouping::{GroupDimension, group_and_sort};
 use crate::history::NavigationHistory;
 use crate::sidebar::config::SidebarConfig;
 use crate::sidebar::tags::TagFilterEvent;
+use crate::smart_folders::{SmartFolderDefinition, SmartFolderSubscription, is_saved_search_path};
+use crate::sorting::comparator::SortCriteria;
+
+/// Virtual root path used while composing an unsaved smart folder.
+const SMART_FOLDER_DRAFT_PATH: &str = "smart://draft";
 
 /// Actions triggered by global window keyboard shortcuts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +68,8 @@ pub enum WindowKeyAction {
     GetInfo,
     /// Open persistent Quick Inspector (`Ctrl+Alt+I` or `Cmd+Alt+I`).
     QuickInspector,
+    /// Create a new smart folder (`Ctrl+Alt+N` or `Cmd+Alt+N`).
+    NewSmartFolder,
 }
 
 /// Maps keyboard shortcut combinations to corresponding [`WindowKeyAction`] variants.
@@ -150,6 +161,9 @@ pub fn map_key_to_window_action(
         if keyval == gdk4::Key::i || keyval == gdk4::Key::I {
             return Some(WindowKeyAction::QuickInspector);
         }
+        if keyval == gdk4::Key::n || keyval == gdk4::Key::N {
+            return Some(WindowKeyAction::NewSmartFolder);
+        }
     }
 
     if super_key && !ctrl && !alt && !shift && (keyval == gdk4::Key::i || keyval == gdk4::Key::I) {
@@ -180,6 +194,8 @@ pub struct FinderWindow {
     pub column_container: ColumnContainer,
     /// Hierarchical tabular list view widget.
     pub list_view: HierarchicalListViewWidget,
+    /// Icon grid view widget.
+    pub icon_view: IconGridViewWidget,
     /// Bottom breadcrumbs path bar widget (28px height).
     pub path_bar: PathBarWidget,
     /// Bottom breadcrumbs dock container (28px height).
@@ -196,6 +212,16 @@ pub struct FinderWindow {
     pub queue_popover: OperationsQueuePopover,
     /// Active floating transfer progress dialogs keyed by operation id.
     pub active_dialogs: Rc<RefCell<HashMap<String, TransferProgressDialog>>>,
+    /// Collapsible smart folder criteria builder bar.
+    pub smart_folder_bar: SmartFolderBar,
+    /// Latest rendered smart folder result set, retained for view-mode switches.
+    smart_folder_results: Rc<RefCell<Vec<FileItem>>>,
+    /// Active inotify subscription for the displayed smart folder.
+    smart_folder_subscription: Rc<RefCell<Option<SmartFolderSubscription>>>,
+    /// Persisted `.savedSearch` path backing the active smart folder, if saved.
+    smart_folder_edit_path: Rc<RefCell<Option<PathBuf>>>,
+    /// Generation counter used to debounce criteria-triggered re-evaluation.
+    smart_folder_generation: Rc<Cell<u64>>,
 }
 
 struct LayoutCompartments {
@@ -206,9 +232,11 @@ struct LayoutCompartments {
     stack: gtk4::Stack,
     column_container: ColumnContainer,
     list_view: HierarchicalListViewWidget,
+    icon_view: IconGridViewWidget,
     path_bar: PathBarWidget,
     breadcrumbs_box: gtk4::Box,
     breadcrumbs_label: gtk4::Label,
+    smart_folder_bar: SmartFolderBar,
 }
 
 impl FinderWindow {
@@ -244,6 +272,7 @@ impl FinderWindow {
         let layout = Self::build_layout_compartments(&initial_path_buf);
         layout.column_container.set_coordinator(&coordinator);
         layout.list_view.set_coordinator(&coordinator);
+        layout.icon_view.set_coordinator(&coordinator);
 
         let root_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -270,6 +299,7 @@ impl FinderWindow {
             stack: layout.stack,
             column_container: layout.column_container,
             list_view: layout.list_view,
+            icon_view: layout.icon_view,
             path_bar: layout.path_bar,
             breadcrumbs_box: layout.breadcrumbs_box,
             breadcrumbs_label: layout.breadcrumbs_label,
@@ -278,11 +308,17 @@ impl FinderWindow {
             view_mode,
             queue_popover,
             active_dialogs,
+            smart_folder_bar: layout.smart_folder_bar,
+            smart_folder_results: Rc::new(RefCell::new(Vec::new())),
+            smart_folder_subscription: Rc::new(RefCell::new(None)),
+            smart_folder_edit_path: Rc::new(RefCell::new(None)),
+            smart_folder_generation: Rc::new(Cell::new(0)),
         };
 
         finder_win.sync_path_ui(&initial_path_buf);
         finder_win.wire_coordinator();
         finder_win.wire_signals();
+        finder_win.wire_smart_folder_ui();
         finder_win.wire_keyboard_shortcuts();
         finder_win.wire_operations_ui();
 
@@ -356,7 +392,10 @@ impl FinderWindow {
             .vexpand(true)
             .build();
 
-        let (stack, column_container, list_view) = Self::build_view_stack(initial_path);
+        let smart_folder_bar = SmartFolderBar::new();
+        main_view_box.append(&smart_folder_bar.container);
+
+        let (stack, column_container, list_view, icon_view) = Self::build_view_stack(initial_path);
         main_view_box.append(&stack);
 
         let path_bar = PathBarWidget::new();
@@ -381,45 +420,40 @@ impl FinderWindow {
             stack,
             column_container,
             list_view,
+            icon_view,
             path_bar,
             breadcrumbs_box,
             breadcrumbs_label,
+            smart_folder_bar,
         }
     }
 
     fn build_view_stack(
         initial_path: &Path,
-    ) -> (gtk4::Stack, ColumnContainer, HierarchicalListViewWidget) {
+    ) -> (
+        gtk4::Stack,
+        ColumnContainer,
+        HierarchicalListViewWidget,
+        IconGridViewWidget,
+    ) {
         let stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::Crossfade)
             .hexpand(true)
             .vexpand(true)
             .build();
 
-        let icons_page = Self::build_placeholder_page("Icons View (Placeholder)");
+        let icon_view = IconGridViewWidget::new(initial_path);
         let list_view = HierarchicalListViewWidget::new(initial_path);
         let column_container = ColumnContainer::new(initial_path);
 
-        stack.add_named(&icons_page, Some(ViewMode::Icons.as_str()));
+        stack.add_named(&icon_view.container, Some(ViewMode::Icons.as_str()));
         stack.add_named(&list_view.container, Some(ViewMode::List.as_str()));
         stack.add_named(
             &column_container.scrolled_window,
             Some(ViewMode::Columns.as_str()),
         );
         stack.set_visible_child_name(ViewMode::Columns.as_str());
-        (stack, column_container, list_view)
-    }
-
-    fn build_placeholder_page(text: &'static str) -> gtk4::Box {
-        let page = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Vertical)
-            .hexpand(true)
-            .vexpand(true)
-            .valign(gtk4::Align::Center)
-            .halign(gtk4::Align::Center)
-            .build();
-        page.append(&gtk4::Label::new(Some(text)));
-        page
+        (stack, column_container, list_view, icon_view)
     }
 
     /// Presents the Finder window.
@@ -475,6 +509,9 @@ impl FinderWindow {
             WindowKeyAction::QuickInspector => {
                 let _ = self.open_quick_inspector();
             }
+            WindowKeyAction::NewSmartFolder => {
+                self.open_new_smart_folder();
+            }
         }
     }
 
@@ -525,7 +562,11 @@ impl FinderWindow {
         prefs.calculate_all_sizes = !prefs.calculate_all_sizes;
         let _ = prefs.save();
         let curr = self.history.borrow().current_path().to_path_buf();
-        if !crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
+        if self.smart_folder_bar.is_visible() {
+            let root = self.smart_folder_virtual_root();
+            let items = self.smart_folder_results.borrow().clone();
+            self.display_smart_folder_items(&root, &items);
+        } else if !crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
             self.list_view.navigate_root(&curr);
         }
     }
@@ -551,17 +592,39 @@ impl FinderWindow {
         }
     }
 
-    /// Navigates to a new directory path.
+    /// Navigates to a new directory path or saved smart folder.
     pub fn navigate_to(&self, target: impl AsRef<Path>) {
         let target_buf = target.as_ref().to_path_buf();
+        if !self.prepare_smart_folder_target(&target_buf) {
+            return;
+        }
         self.history.borrow_mut().navigate_to(&target_buf);
         self.coordinator.navigate_to(&target_buf);
         self.apply_navigation(&target_buf);
     }
 
+    /// Opens a persisted `.savedSearch` file in the smart folder virtual view.
+    pub fn open_smart_folder_file(&self, path: impl AsRef<Path>) {
+        self.navigate_to(path);
+    }
+
+    /// Activates the criteria bar with a fresh draft smart folder.
+    pub fn open_new_smart_folder(&self) {
+        let definition = self.coordinator.open_new_smart_folder();
+        *self.smart_folder_edit_path.borrow_mut() = None;
+        self.smart_folder_bar.show_draft(definition);
+        self.header_bar
+            .set_title("New Smart Folder", Some("folder-saved-search-symbolic"));
+        self.breadcrumbs_label.set_text("Smart Folders › New");
+        self.restart_smart_folder_subscription();
+    }
+
     /// Navigates back one step in history.
     pub fn go_back(&self) {
         if let Some(target) = self.coordinator.go_back() {
+            if !self.prepare_smart_folder_target(&target) {
+                return;
+            }
             self.history.borrow_mut().navigate_to(&target);
             self.apply_navigation(&target);
         }
@@ -570,12 +633,49 @@ impl FinderWindow {
     /// Navigates forward one step in history.
     pub fn go_forward(&self) {
         if let Some(target) = self.coordinator.go_forward() {
+            if !self.prepare_smart_folder_target(&target) {
+                return;
+            }
             self.history.borrow_mut().navigate_to(&target);
             self.apply_navigation(&target);
         }
     }
 
+    /// Prepares smart folder state for `target`, returning `false` when loading fails.
+    fn prepare_smart_folder_target(&self, target: &Path) -> bool {
+        if !is_saved_search_path(target) {
+            self.coordinator.set_active_smart_folder(None);
+            return true;
+        }
+
+        let already_loaded = self.coordinator.active_smart_folder().is_some()
+            && self.smart_folder_edit_path.borrow().as_deref() == Some(target);
+        if already_loaded {
+            return true;
+        }
+
+        match self.coordinator.open_smart_folder_file(target) {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::warn!(
+                    "Unable to open saved search '{}': {error}",
+                    target.display()
+                );
+                false
+            }
+        }
+    }
+
     fn apply_navigation(&self, target: &Path) {
+        if is_saved_search_path(target) {
+            if let Some(definition) = self.coordinator.active_smart_folder() {
+                self.show_smart_folder_view(target, &definition);
+            }
+            return;
+        }
+
+        self.hide_smart_folder_view();
+
         if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(target)
             && let Some(tag_name) =
                 crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(target)
@@ -583,7 +683,8 @@ impl FinderWindow {
             let items = crate::ui::tagging::sidebar_filter::query_tagged_files(&tag_name);
             self.column_container
                 .navigate_virtual_tag(target, items.clone());
-            self.list_view.set_custom_items(target, items);
+            self.list_view.set_custom_items(target, items.clone());
+            self.icon_view.set_custom_items(target, items);
             self.header_bar
                 .set_title(&format!("Tag: {tag_name}"), Some("tag-symbolic"));
             self.breadcrumbs_label
@@ -597,6 +698,159 @@ impl FinderWindow {
         }
         self.column_container.navigate_root(target);
         self.list_view.navigate_root(target);
+        self.icon_view.navigate_root(target);
+    }
+
+    fn wire_smart_folder_ui(&self) {
+        let win = self.clone();
+        self.smart_folder_bar.connect_changed(move || {
+            win.schedule_smart_folder_refresh();
+        });
+
+        let win = self.clone();
+        self.smart_folder_bar
+            .connect_saved(move |path, _definition| {
+                win.sidebar.refresh_favorites();
+                win.navigate_to(&path);
+            });
+
+        let win = self.clone();
+        self.smart_folder_bar.connect_closed(move || {
+            win.close_smart_folder();
+        });
+    }
+
+    fn show_smart_folder_view(&self, path: &Path, definition: &SmartFolderDefinition) {
+        *self.smart_folder_edit_path.borrow_mut() = Some(path.to_path_buf());
+        self.smart_folder_bar
+            .show_definition(definition.clone(), Some(path.to_path_buf()));
+        self.header_bar.set_title(
+            &format!("Smart Folder: {}", definition.name),
+            Some(definition.icon_name()),
+        );
+        self.breadcrumbs_label
+            .set_text(&format!("Smart Folders › {}", definition.name));
+        self.path_bar
+            .set_path(path, self.coordinator.selection().as_deref());
+        self.sidebar.set_active_path(path);
+        let can_back = self.coordinator.can_go_back();
+        let can_forward = self.coordinator.can_go_forward();
+        self.header_bar
+            .update_history_buttons(can_back, can_forward);
+        self.restart_smart_folder_subscription();
+    }
+
+    fn hide_smart_folder_view(&self) {
+        self.smart_folder_bar.hide();
+        *self.smart_folder_subscription.borrow_mut() = None;
+        self.smart_folder_results.borrow_mut().clear();
+        *self.smart_folder_edit_path.borrow_mut() = None;
+        self.smart_folder_generation
+            .set(self.smart_folder_generation.get().wrapping_add(1));
+    }
+
+    fn close_smart_folder(&self) {
+        self.hide_smart_folder_view();
+        self.coordinator.set_active_smart_folder(None);
+
+        let current = self.coordinator.current_path();
+        if is_saved_search_path(&current) {
+            let home = std::env::var("HOME").map_or_else(|_| PathBuf::from("/"), PathBuf::from);
+            self.navigate_to(home);
+        } else {
+            self.apply_navigation(&current);
+        }
+    }
+
+    fn smart_folder_virtual_root(&self) -> PathBuf {
+        self.smart_folder_edit_path
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(SMART_FOLDER_DRAFT_PATH))
+    }
+
+    fn schedule_smart_folder_refresh(&self) {
+        if !self.smart_folder_bar.is_visible() {
+            return;
+        }
+        let generation = self.smart_folder_generation.get().wrapping_add(1);
+        self.smart_folder_generation.set(generation);
+
+        let win = self.clone();
+        glib::timeout_add_local_once(CRITERIA_DEBOUNCE, move || {
+            if win.smart_folder_generation.get() == generation && win.smart_folder_bar.is_visible()
+            {
+                win.restart_smart_folder_subscription();
+            }
+        });
+    }
+
+    fn restart_smart_folder_subscription(&self) {
+        let definition = if self.smart_folder_bar.is_visible() {
+            self.smart_folder_bar.definition()
+        } else {
+            let Some(definition) = self.coordinator.active_smart_folder() else {
+                return;
+            };
+            definition
+        };
+
+        let generation = self.smart_folder_generation.get().wrapping_add(1);
+        self.smart_folder_generation.set(generation);
+
+        let root = self.smart_folder_virtual_root();
+        let (sender, receiver) = async_channel::unbounded::<Vec<FileItem>>();
+        match self
+            .coordinator
+            .smart_folder_engine
+            .subscribe(&definition, sender)
+        {
+            Ok(subscription) => {
+                *self.smart_folder_subscription.borrow_mut() = Some(subscription);
+            }
+            Err(error) => {
+                tracing::warn!("Failed to start smart folder subscription: {error}");
+                return;
+            }
+        }
+
+        let win = self.clone();
+        glib::spawn_future_local(async move {
+            while let Ok(items) = receiver.recv().await {
+                if win.smart_folder_generation.get() != generation {
+                    break;
+                }
+                win.display_smart_folder_items(&root, &items);
+            }
+        });
+    }
+
+    fn display_smart_folder_items(&self, root: &Path, items: &[FileItem]) {
+        let sections = group_and_sort(
+            items,
+            GroupDimension::None,
+            SortCriteria::default(),
+            &HashSet::new(),
+        );
+        let ordered: Vec<FileItem> = sections
+            .into_iter()
+            .flat_map(|section| section.items)
+            .collect();
+
+        self.smart_folder_results.borrow_mut().clone_from(&ordered);
+        self.smart_folder_bar.set_count(ordered.len());
+
+        match self.view_mode() {
+            ViewMode::Columns => {
+                self.column_container.navigate_virtual_tag(root, ordered);
+            }
+            ViewMode::List => {
+                self.list_view.set_custom_items(root, ordered);
+            }
+            ViewMode::Icons => {
+                self.icon_view.set_custom_items(root, ordered);
+            }
+        }
     }
 
     /// Returns the currently active view mode.
@@ -613,6 +867,13 @@ impl FinderWindow {
         self.header_bar.set_view_mode(mode);
 
         let curr = self.coordinator.current_path();
+        if self.smart_folder_bar.is_visible() {
+            let root = self.smart_folder_virtual_root();
+            let items = self.smart_folder_results.borrow().clone();
+            self.display_smart_folder_items(&root, &items);
+            return;
+        }
+
         if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(&curr) {
             if let Some(tag_name) =
                 crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(&curr)
@@ -625,7 +886,9 @@ impl FinderWindow {
                     ViewMode::List => {
                         self.list_view.set_custom_items(&curr, items);
                     }
-                    ViewMode::Icons => {}
+                    ViewMode::Icons => {
+                        self.icon_view.set_custom_items(&curr, items);
+                    }
                 }
             }
         } else {
@@ -636,13 +899,34 @@ impl FinderWindow {
                 ViewMode::List => {
                     self.list_view.navigate_root(&curr);
                 }
-                ViewMode::Icons => {}
+                ViewMode::Icons => {
+                    self.icon_view.navigate_root(&curr);
+                }
             }
         }
     }
 
     /// Synchronizes header bar title, history buttons, and breadcrumb path.
     fn sync_path_ui(&self, path: &Path) {
+        if is_saved_search_path(path) {
+            if let Some(definition) = self.coordinator.active_smart_folder() {
+                self.header_bar.set_title(
+                    &format!("Smart Folder: {}", definition.name),
+                    Some(definition.icon_name()),
+                );
+                self.breadcrumbs_label
+                    .set_text(&format!("Smart Folders › {}", definition.name));
+                self.path_bar
+                    .set_path(path, self.coordinator.selection().as_deref());
+                self.sidebar.set_active_path(path);
+                let can_back = self.coordinator.can_go_back();
+                let can_forward = self.coordinator.can_go_forward();
+                self.header_bar
+                    .update_history_buttons(can_back, can_forward);
+            }
+            return;
+        }
+
         if crate::ui::tagging::sidebar_filter::is_tag_virtual_path(path) {
             let tag_name = crate::ui::tagging::sidebar_filter::parse_tag_virtual_path(path)
                 .unwrap_or_default();
@@ -752,6 +1036,15 @@ impl FinderWindow {
         });
 
         let win = self.clone();
+        self.icon_view.connect_path_changed(move |path| {
+            if path.is_dir() {
+                win.coordinator.navigate_to(path);
+            } else {
+                win.coordinator.set_selection(Some(path));
+            }
+        });
+
+        let win = self.clone();
         self.path_bar.connect_navigate(move |path| {
             win.navigate_to(path);
         });
@@ -779,6 +1072,11 @@ impl FinderWindow {
         let win = self.clone();
 
         controller.connect_key_pressed(move |_ctrl, keyval, _code, state| {
+            if matches!(keyval, gdk4::Key::Alt_L | gdk4::Key::Alt_R) {
+                win.smart_folder_bar.set_alt_down(true);
+                return glib::Propagation::Proceed;
+            }
+
             // Spacebar: Toggle Quick Look preview unless a text entry or text view is focused
             if keyval == gdk4::Key::space {
                 if let Some(focus) = GtkWindowExt::focus(&win.window)
@@ -813,6 +1111,13 @@ impl FinderWindow {
                 win.handle_action(action);
                 glib::Propagation::Stop
             })
+        });
+
+        let win = self.clone();
+        controller.connect_key_released(move |_ctrl, keyval, _code, _state| {
+            if matches!(keyval, gdk4::Key::Alt_L | gdk4::Key::Alt_R) {
+                win.smart_folder_bar.set_alt_down(false);
+            }
         });
 
         self.window.add_controller(controller);
@@ -962,6 +1267,22 @@ mod tests {
                 gdk4::ModifierType::SUPER_MASK | gdk4::ModifierType::ALT_MASK
             ),
             Some(WindowKeyAction::ToggleSidebar)
+        );
+
+        // New Smart Folder (Ctrl+Alt+N, Cmd+Alt+N)
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::n,
+                gdk4::ModifierType::CONTROL_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::NewSmartFolder)
+        );
+        assert_eq!(
+            map_key_to_window_action(
+                gdk4::Key::N,
+                gdk4::ModifierType::SUPER_MASK | gdk4::ModifierType::ALT_MASK
+            ),
+            Some(WindowKeyAction::NewSmartFolder)
         );
 
         // Toggle Path Bar (Ctrl+Alt+P, Cmd+Alt+P)
