@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use shared::ipc::{file_uri_to_path, path_to_file_uri};
 
+use crate::smart_folders::is_saved_search_path;
+
 /// Entry in the user's Freedesktop bookmarks file.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BookmarkEntry {
@@ -47,6 +49,12 @@ impl BookmarkEntry {
         if self.uri.starts_with("trash://") {
             return "Trash".to_string();
         }
+        if is_saved_search_path(&self.path) {
+            return self.path.file_stem().and_then(|n| n.to_str()).map_or_else(
+                || self.path.to_string_lossy().into_owned(),
+                ToString::to_string,
+            );
+        }
         self.path.file_name().and_then(|n| n.to_str()).map_or_else(
             || self.path.to_string_lossy().into_owned(),
             ToString::to_string,
@@ -58,6 +66,9 @@ impl BookmarkEntry {
     pub fn icon_name(&self) -> &'static str {
         if self.uri.starts_with("trash://") {
             return "user-trash-symbolic";
+        }
+        if is_saved_search_path(&self.path) {
+            return "folder-saved-search-symbolic";
         }
         let name_lower = self.display_name().to_ascii_lowercase();
         match name_lower.as_str() {

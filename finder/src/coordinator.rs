@@ -9,6 +9,10 @@ use gtk4::prelude::*;
 use crate::history::NavigationHistory;
 use crate::operations::{FolderSizeManager, OperationsQueue};
 use crate::quicklook::QuickLookEngine;
+use crate::smart_folders::{
+    CriteriaGroup, Result as SmartFolderResult, SmartFolderDefinition, SmartFolderEngine,
+    is_saved_search_path, load_smart_folder,
+};
 use crate::ui::inspector::GetInfoDialog;
 use crate::ui::quicklook::QuickLookWindow;
 use crate::ui::view_mode::ViewMode;
@@ -58,6 +62,10 @@ pub struct NavigationCoordinator {
     pub folder_size_manager: Arc<FolderSizeManager>,
     /// Internal clipboard buffer storing copied or cut paths.
     pub clipboard: RefCell<Option<ClipboardContent>>,
+    /// Smart folder definition currently displayed by the virtual view, if any.
+    pub active_smart_folder: RefCell<Option<SmartFolderDefinition>>,
+    /// Hybrid FTS5/filesystem execution engine shared across smart folder views.
+    pub smart_folder_engine: Arc<SmartFolderEngine>,
 }
 
 impl std::fmt::Debug for NavigationCoordinator {
@@ -79,6 +87,7 @@ impl std::fmt::Debug for NavigationCoordinator {
             .field("undo_manager", &self.undo_manager)
             .field("folder_size_manager", &self.folder_size_manager)
             .field("clipboard", &self.clipboard)
+            .field("active_smart_folder", &self.active_smart_folder)
             .field(
                 "on_path_changed_count",
                 &self.on_path_changed.borrow().len(),
@@ -114,6 +123,8 @@ impl NavigationCoordinator {
             undo_manager,
             folder_size_manager,
             clipboard: RefCell::new(None),
+            active_smart_folder: RefCell::new(None),
+            smart_folder_engine: Arc::new(SmartFolderEngine::open_default()),
         }
     }
 
@@ -163,6 +174,44 @@ impl NavigationCoordinator {
         *self.current_mode.borrow_mut() = mode;
     }
 
+    /// Returns the smart folder currently displayed, if any.
+    #[must_use]
+    pub fn active_smart_folder(&self) -> Option<SmartFolderDefinition> {
+        self.active_smart_folder.borrow().clone()
+    }
+
+    /// Replaces the active smart folder definition.
+    pub fn set_active_smart_folder(&self, definition: Option<SmartFolderDefinition>) {
+        *self.active_smart_folder.borrow_mut() = definition;
+    }
+
+    /// Loads a persisted `.savedSearch` file and marks it as the active smart folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::smart_folders::SmartFolderError`] when the file is missing,
+    /// malformed, or uses an unsupported schema version.
+    pub fn open_smart_folder_file(&self, path: &Path) -> SmartFolderResult<()> {
+        let definition = load_smart_folder(path)?;
+        *self.active_smart_folder.borrow_mut() = Some(definition);
+        Ok(())
+    }
+
+    /// Creates a draft smart folder scoped to the current directory and activates it.
+    pub fn open_new_smart_folder(&self) -> SmartFolderDefinition {
+        let current = self.current_path();
+        let scopes = if current.is_dir() {
+            vec![current]
+        } else {
+            Vec::new()
+        };
+        let mut definition =
+            SmartFolderDefinition::new("Untitled Smart Folder", CriteriaGroup::match_all());
+        definition.scopes = scopes;
+        *self.active_smart_folder.borrow_mut() = Some(definition.clone());
+        definition
+    }
+
     /// Returns the currently selected item or leaf, if any.
     #[must_use]
     pub fn selection(&self) -> Option<PathBuf> {
@@ -189,6 +238,9 @@ impl NavigationCoordinator {
             return;
         }
 
+        if !is_saved_search_path(target_path) {
+            *self.active_smart_folder.borrow_mut() = None;
+        }
         self.history.borrow_mut().navigate_to(target_path);
         *self.active_selection.borrow_mut() = None;
         self.active_selection_paths.borrow_mut().clear();

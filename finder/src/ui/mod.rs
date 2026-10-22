@@ -2,12 +2,14 @@ pub mod columns;
 pub mod context_menu;
 pub mod group_header;
 pub mod header_bar;
+pub mod icons;
 pub mod inspector;
 pub mod list;
 pub mod operations;
 pub mod path_bar;
 pub mod quicklook;
 pub mod sidebar;
+pub mod smart_folder_bar;
 pub mod tagging;
 pub mod theme;
 pub mod view_mode;
@@ -15,6 +17,7 @@ pub mod window;
 
 pub use group_header::{GroupHeaderWidget, GroupToggleCallback};
 pub use header_bar::FinderHeaderBar;
+pub use icons::IconGridViewWidget;
 pub use inspector::{GetInfoDialog, InspectorMode};
 pub use list::{HierarchicalListViewWidget, ListKeyAction};
 pub use operations::{
@@ -23,6 +26,7 @@ pub use operations::{
 pub use path_bar::PathBarWidget;
 pub use quicklook::{QuickLookCarousel, QuickLookConfig, QuickLookWindow};
 pub use sidebar::SidebarWidget;
+pub use smart_folder_bar::{CRITERIA_DEBOUNCE, SmartFolderBar};
 pub use theme::{FINDER_CSS, apply_theme_classes, install_finder_theme};
 pub use view_mode::ViewMode;
 pub use window::FinderWindow;
