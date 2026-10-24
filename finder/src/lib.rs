@@ -10,6 +10,7 @@ pub mod history;
 pub mod metadata;
 pub mod operations;
 pub mod quicklook;
+pub mod search;
 pub mod service;
 pub mod sidebar;
 pub mod smart_folders;
@@ -31,6 +32,10 @@ pub use operations::{
     ActiveTask, BatchOperation, OperationError, OperationEvent, OperationsQueue, ProgressReport,
 };
 pub use quicklook::{PreviewKind, PreviewPayload, QuickLookEngine, QuickLookError};
+pub use search::{
+    AttributeFilter, DateConstraint, ParsedQuery, ScopeBarWidget, SearchError, SearchMode,
+    SearchResultItem, SearchScope,
+};
 pub use service::{
     DbusServiceHandle, FileManagerAction, FileManagerService, export_file_manager_service,
 };

@@ -23,6 +23,7 @@ use crate::breadcrumbs::FinderPreferences;
 use crate::coordinator::NavigationCoordinator;
 use crate::grouping::{GroupDimension, group_and_sort};
 use crate::history::NavigationHistory;
+use crate::search::{ScopeBarWidget, SearchCancellation, SearchExecutionParams};
 use crate::sidebar::config::SidebarConfig;
 use crate::sidebar::tags::TagFilterEvent;
 use crate::smart_folders::{SmartFolderDefinition, SmartFolderSubscription, is_saved_search_path};
@@ -222,6 +223,12 @@ pub struct FinderWindow {
     smart_folder_edit_path: Rc<RefCell<Option<PathBuf>>>,
     /// Generation counter used to debounce criteria-triggered re-evaluation.
     smart_folder_generation: Rc<Cell<u64>>,
+    /// Collapsible scope bar widget for in-app search filtering.
+    pub scope_bar: ScopeBarWidget,
+    /// Monotonic search cancellation token.
+    search_cancellation: Arc<SearchCancellation>,
+    /// Timer source for 150ms search debounce.
+    search_debounce_source: Rc<RefCell<Option<glib::SourceId>>>,
 }
 
 struct LayoutCompartments {
@@ -268,6 +275,7 @@ impl FinderWindow {
 
         let window = Self::build_window(app);
         let header_bar = FinderHeaderBar::new();
+        let scope_bar = ScopeBarWidget::new(initial_path_buf.clone());
 
         let layout = Self::build_layout_compartments(&initial_path_buf);
         layout.column_container.set_coordinator(&coordinator);
@@ -279,6 +287,7 @@ impl FinderWindow {
             .spacing(0)
             .build();
         root_box.append(&header_bar.container);
+        root_box.append(&scope_bar.revealer);
         root_box.append(&layout.paned);
         window.set_content(Some(&root_box));
 
@@ -313,12 +322,16 @@ impl FinderWindow {
             smart_folder_subscription: Rc::new(RefCell::new(None)),
             smart_folder_edit_path: Rc::new(RefCell::new(None)),
             smart_folder_generation: Rc::new(Cell::new(0)),
+            scope_bar,
+            search_cancellation: Arc::new(SearchCancellation::new()),
+            search_debounce_source: Rc::new(RefCell::new(None)),
         };
 
         finder_win.sync_path_ui(&initial_path_buf);
         finder_win.wire_coordinator();
         finder_win.wire_signals();
         finder_win.wire_smart_folder_ui();
+        finder_win.wire_search_ui();
         finder_win.wire_keyboard_shortcuts();
         finder_win.wire_operations_ui();
 
@@ -598,6 +611,19 @@ impl FinderWindow {
         if !self.prepare_smart_folder_target(&target_buf) {
             return;
         }
+
+        if self.coordinator.is_searching() || self.scope_bar.is_revealed() {
+            if let Some(source_id) = self.search_debounce_source.borrow_mut().take() {
+                source_id.remove();
+            }
+            self.search_cancellation.cancel();
+            self.scope_bar.set_revealed(false);
+            self.scope_bar.set_status_text("");
+            if !self.header_bar.search_entry.text().is_empty() {
+                self.header_bar.search_entry.set_text("");
+            }
+        }
+
         self.history.borrow_mut().navigate_to(&target_buf);
         self.coordinator.navigate_to(&target_buf);
         self.apply_navigation(&target_buf);
@@ -954,6 +980,7 @@ impl FinderWindow {
         self.header_bar
             .update_history_buttons(can_back, can_forward);
         self.sidebar.set_active_path(path);
+        self.scope_bar.set_current_folder(path);
     }
 
     fn wire_coordinator(&self) {
@@ -1065,6 +1092,167 @@ impl FinderWindow {
         });
     }
 
+    fn wire_search_ui(&self) {
+        let win = self.clone();
+        self.header_bar.connect_search_changed(move |text| {
+            win.on_search_text_changed(text);
+        });
+
+        let win = self.clone();
+        self.header_bar.connect_stop_search(move || {
+            win.clear_search();
+        });
+
+        let win = self.clone();
+        self.scope_bar.connect_scope_changed(move |_scope| {
+            win.trigger_search();
+        });
+
+        let win = self.clone();
+        self.scope_bar.connect_mode_changed(move |_mode| {
+            win.trigger_search();
+        });
+
+        let win = self.clone();
+        self.scope_bar.connect_system_files_changed(move |_sys| {
+            win.trigger_search();
+        });
+
+        let win = self.clone();
+        self.scope_bar.connect_clear_clicked(move || {
+            win.clear_search();
+        });
+    }
+
+    fn on_search_text_changed(&self, text: &str) {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            if self.coordinator.is_searching() {
+                self.clear_search();
+            }
+            return;
+        }
+
+        let current_folder = self.coordinator.current_path();
+        self.scope_bar.set_current_folder(&current_folder);
+        self.scope_bar.set_revealed(true);
+        self.coordinator.begin_search(trimmed);
+
+        if let Some(source_id) = self.search_debounce_source.borrow_mut().take() {
+            source_id.remove();
+        }
+
+        self.scope_bar.set_status_text("Searching...");
+
+        let win = self.clone();
+        let source_id =
+            glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
+                win.trigger_search();
+            });
+        *self.search_debounce_source.borrow_mut() = Some(source_id);
+    }
+
+    fn trigger_search(&self) {
+        let query_text = self
+            .header_bar
+            .search_entry
+            .text()
+            .as_str()
+            .trim()
+            .to_string();
+        if query_text.is_empty() {
+            return;
+        }
+
+        let query_id = self.search_cancellation.next_query_id();
+        let params = SearchExecutionParams {
+            query: query_text.clone(),
+            scope: self.scope_bar.scope(),
+            mode: self.scope_bar.mode(),
+            root_path: self.coordinator.current_path(),
+            include_system_files: self.scope_bar.include_system_files(),
+            query_id,
+        };
+
+        let _ = crate::search::record_query(&query_text);
+
+        let (sender, receiver) = async_channel::bounded::<(
+            u64,
+            crate::search::Result<Vec<crate::search::SearchResultItem>>,
+        )>(1);
+        let cancellation = Arc::clone(&self.search_cancellation);
+
+        std::thread::spawn(move || {
+            let results = crate::search::execute_search(&params, &cancellation);
+            let _ = sender.send_blocking((query_id, results));
+        });
+
+        let win = self.clone();
+        glib::spawn_future_local(async move {
+            if let Ok((res_id, results)) = receiver.recv().await {
+                win.handle_search_results(res_id, results);
+            }
+        });
+    }
+
+    fn handle_search_results(
+        &self,
+        query_id: u64,
+        results: crate::search::Result<Vec<crate::search::SearchResultItem>>,
+    ) {
+        if !self.search_cancellation.is_active(query_id) {
+            return;
+        }
+
+        match results {
+            Ok(items) => {
+                let count = items.len();
+                let status_msg = if count == 1 {
+                    "1 item found".to_string()
+                } else {
+                    format!("{count} items found")
+                };
+                self.scope_bar.set_status_text(&status_msg);
+
+                let file_items: Vec<FileItem> = items
+                    .iter()
+                    .map(crate::search::SearchResultItem::to_file_item)
+                    .collect();
+                let target = self.coordinator.current_path();
+                self.column_container
+                    .navigate_virtual_tag(&target, file_items.clone());
+                self.list_view.set_custom_items(&target, file_items.clone());
+                self.icon_view.set_custom_items(&target, file_items);
+            }
+            Err(crate::search::SearchError::Cancelled) => {}
+            Err(e) => {
+                self.scope_bar.set_status_text(&format!("Error: {e}"));
+            }
+        }
+    }
+
+    fn clear_search(&self) {
+        if let Some(source_id) = self.search_debounce_source.borrow_mut().take() {
+            source_id.remove();
+        }
+        self.search_cancellation.cancel();
+
+        let restore_path = self
+            .coordinator
+            .saved_pre_search_path()
+            .unwrap_or_else(|| self.coordinator.current_path());
+
+        self.coordinator.cancel_search();
+        self.scope_bar.set_revealed(false);
+        self.scope_bar.set_status_text("");
+
+        if !self.header_bar.search_entry.text().is_empty() {
+            self.header_bar.search_entry.set_text("");
+        }
+
+        self.apply_navigation(&restore_path);
+    }
+
     /// Binds global keyboard shortcuts on the window via [`gtk4::EventControllerKey`].
     fn wire_keyboard_shortcuts(&self) {
         let controller = gtk4::EventControllerKey::new();
@@ -1104,6 +1292,13 @@ impl FinderWindow {
                 } else {
                     let _ = win.coordinator.open_get_info(Some(&win.window));
                 }
+                return glib::Propagation::Stop;
+            }
+
+            if keyval == gdk4::Key::Escape
+                && (win.coordinator.is_searching() || win.scope_bar.is_revealed())
+            {
+                win.clear_search();
                 return glib::Propagation::Stop;
             }
 

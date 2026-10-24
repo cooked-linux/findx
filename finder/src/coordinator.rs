@@ -66,6 +66,12 @@ pub struct NavigationCoordinator {
     pub active_smart_folder: RefCell<Option<SmartFolderDefinition>>,
     /// Hybrid FTS5/filesystem execution engine shared across smart folder views.
     pub smart_folder_engine: Arc<SmartFolderEngine>,
+    /// Active in-app search query text, if searching.
+    pub active_search_query: RefCell<Option<String>>,
+    /// Flag indicating whether an in-app search session is active.
+    pub is_searching: RefCell<bool>,
+    /// Directory path before entering search session, for non-destructive restoration.
+    pub saved_pre_search_path: RefCell<Option<PathBuf>>,
 }
 
 impl std::fmt::Debug for NavigationCoordinator {
@@ -125,6 +131,9 @@ impl NavigationCoordinator {
             clipboard: RefCell::new(None),
             active_smart_folder: RefCell::new(None),
             smart_folder_engine: Arc::new(SmartFolderEngine::open_default()),
+            active_search_query: RefCell::new(None),
+            is_searching: RefCell::new(false),
+            saved_pre_search_path: RefCell::new(None),
         }
     }
 
@@ -212,6 +221,33 @@ impl NavigationCoordinator {
         definition
     }
 
+    /// Initiates or updates an in-app search session.
+    pub fn begin_search(&self, query: &str) {
+        if !*self.is_searching.borrow() {
+            *self.saved_pre_search_path.borrow_mut() = Some(self.current_path());
+            *self.is_searching.borrow_mut() = true;
+        }
+        *self.active_search_query.borrow_mut() = Some(query.to_string());
+    }
+
+    /// Cancels or clears the active search session.
+    pub fn cancel_search(&self) {
+        *self.is_searching.borrow_mut() = false;
+        *self.active_search_query.borrow_mut() = None;
+    }
+
+    /// Indicates whether in-app search is currently active.
+    #[must_use]
+    pub fn is_searching(&self) -> bool {
+        *self.is_searching.borrow()
+    }
+
+    /// Returns the pre-search path saved prior to initiating search.
+    #[must_use]
+    pub fn saved_pre_search_path(&self) -> Option<PathBuf> {
+        self.saved_pre_search_path.borrow().clone()
+    }
+
     /// Returns the currently selected item or leaf, if any.
     #[must_use]
     pub fn selection(&self) -> Option<PathBuf> {
@@ -241,6 +277,8 @@ impl NavigationCoordinator {
         if !is_saved_search_path(target_path) {
             *self.active_smart_folder.borrow_mut() = None;
         }
+        self.cancel_search();
+        *self.saved_pre_search_path.borrow_mut() = None;
         self.history.borrow_mut().navigate_to(target_path);
         *self.active_selection.borrow_mut() = None;
         self.active_selection_paths.borrow_mut().clear();
