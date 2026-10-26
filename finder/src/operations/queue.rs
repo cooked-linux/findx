@@ -71,8 +71,17 @@ impl OperationsQueueState {
             completed_records: Vec::new(),
         };
         self.active_tasks.insert(op.id.clone(), task);
-        let worker = OperationWorker::new(op, control, worker_tx.clone());
-        drop(worker.spawn());
+        if op.kind == OperationKind::Compress {
+            let worker = crate::archive::ArchiveWorker::from_batch_operation(
+                op,
+                &control,
+                worker_tx.clone(),
+            );
+            drop(worker.spawn());
+        } else {
+            let worker = OperationWorker::new(op, control, worker_tx.clone());
+            drop(worker.spawn());
+        }
     }
 
     fn maybe_schedule_next(&mut self, worker_tx: &Sender<OperationEvent>) {
@@ -413,7 +422,7 @@ const fn map_operation_kind_to_undo(kind: OperationKind) -> Option<UndoOperation
         OperationKind::Copy => Some(UndoOperationType::Copy),
         OperationKind::Duplicate => Some(UndoOperationType::Duplicate),
         OperationKind::Trash => Some(UndoOperationType::Trash),
-        OperationKind::Restore | OperationKind::Delete => None,
+        OperationKind::Restore | OperationKind::Delete | OperationKind::Compress => None,
     }
 }
 

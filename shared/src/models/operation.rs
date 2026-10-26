@@ -21,6 +21,8 @@ pub enum OperationKind {
     Restore,
     /// Permanently delete items without moving to Trash.
     Delete,
+    /// Compress items into an archive.
+    Compress,
 }
 
 impl OperationKind {
@@ -34,6 +36,7 @@ impl OperationKind {
             Self::Trash => "Move to Trash",
             Self::Restore => "Restore",
             Self::Delete => "Delete",
+            Self::Compress => "Compress",
         }
     }
 
@@ -47,6 +50,7 @@ impl OperationKind {
             Self::Trash => "Trashing",
             Self::Restore => "Restoring",
             Self::Delete => "Deleting",
+            Self::Compress => "Compressing",
         }
     }
 
@@ -60,6 +64,7 @@ impl OperationKind {
             Self::Trash => "Trashed",
             Self::Restore => "Restored",
             Self::Delete => "Deleted",
+            Self::Compress => "Compressed",
         }
     }
 
@@ -68,7 +73,7 @@ impl OperationKind {
     pub const fn requires_destination(&self) -> bool {
         match self {
             Self::Copy | Self::Move => true,
-            Self::Duplicate | Self::Trash | Self::Restore | Self::Delete => false,
+            Self::Duplicate | Self::Trash | Self::Restore | Self::Delete | Self::Compress => false,
         }
     }
 }
@@ -90,6 +95,7 @@ impl FromStr for OperationKind {
             "trash" | "move to trash" => Ok(Self::Trash),
             "restore" => Ok(Self::Restore),
             "delete" | "remove" => Ok(Self::Delete),
+            "compress" | "archive" => Ok(Self::Compress),
             _ => Err(ModelError::invalid_operation(format!(
                 "unrecognized operation kind: '{s}'"
             ))),
@@ -352,6 +358,11 @@ mod tests {
         assert!(OperationKind::Copy.requires_destination());
         assert!(!OperationKind::Trash.requires_destination());
 
+        assert_eq!(OperationKind::Compress.display_name(), "Compress");
+        assert_eq!(OperationKind::Compress.verb_present(), "Compressing");
+        assert_eq!(OperationKind::Compress.verb_past(), "Compressed");
+        assert!(!OperationKind::Compress.requires_destination());
+
         assert_eq!(
             "move".parse::<OperationKind>().unwrap(),
             OperationKind::Move
@@ -359,6 +370,14 @@ mod tests {
         assert_eq!(
             "delete".parse::<OperationKind>().unwrap(),
             OperationKind::Delete
+        );
+        assert_eq!(
+            "compress".parse::<OperationKind>().unwrap(),
+            OperationKind::Compress
+        );
+        assert_eq!(
+            "archive".parse::<OperationKind>().unwrap(),
+            OperationKind::Compress
         );
         assert!("invalid_op".parse::<OperationKind>().is_err());
     }

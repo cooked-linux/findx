@@ -159,7 +159,10 @@ fn verify_destination_space(
     let needs_space_check = match op.kind {
         OperationKind::Copy | OperationKind::Duplicate => true,
         OperationKind::Move => requires_cross_device_copy,
-        OperationKind::Trash | OperationKind::Restore | OperationKind::Delete => false,
+        OperationKind::Trash
+        | OperationKind::Restore
+        | OperationKind::Delete
+        | OperationKind::Compress => false,
     };
 
     if needs_space_check && let Some(ref dst) = op.destination {
@@ -211,7 +214,8 @@ impl<F: FnMut(OperationEvent)> PreflightAccumulator<'_, F> {
             OperationKind::Duplicate
             | OperationKind::Trash
             | OperationKind::Restore
-            | OperationKind::Delete => None,
+            | OperationKind::Delete
+            | OperationKind::Compress => None,
         };
 
         let duplicate_dest = if self.op.kind == OperationKind::Duplicate {

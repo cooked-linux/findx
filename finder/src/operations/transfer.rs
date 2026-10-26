@@ -442,6 +442,9 @@ where
             // Restore handled via trash recovery
             Ok(0)
         }
+        OperationKind::Compress => Err(OperationError::Invalid(
+            "Compression operations must be dispatched through the archive engine".into(),
+        )),
     }
 }
 

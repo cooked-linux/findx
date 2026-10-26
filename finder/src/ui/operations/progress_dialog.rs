@@ -31,6 +31,7 @@ pub const fn operation_kind_icon(kind: OperationKind) -> &'static str {
         OperationKind::Move => "edit-cut-symbolic",
         OperationKind::Trash | OperationKind::Delete => "user-trash-symbolic",
         OperationKind::Restore => "edit-undo-symbolic",
+        OperationKind::Compress => "package-x-generic-symbolic",
     }
 }
 
@@ -57,6 +58,8 @@ pub fn format_operation_title(
         (OperationKind::Restore, Some(dest)) => format!("Restoring {items_str} to '{dest}'"),
         (OperationKind::Restore, None) => format!("Restoring {items_str}"),
         (OperationKind::Delete, _) => format!("Deleting {items_str}"),
+        (OperationKind::Compress, Some(dest)) => format!("Compressing '{dest}'"),
+        (OperationKind::Compress, None) => format!("Compressing {items_str}"),
     }
 }
 
@@ -500,6 +503,14 @@ mod tests {
             format_operation_title(OperationKind::Delete, 1, None),
             "Deleting 1 item"
         );
+        assert_eq!(
+            format_operation_title(OperationKind::Compress, 12, None),
+            "Compressing 12 items"
+        );
+        assert_eq!(
+            format_operation_title(OperationKind::Compress, 1, Some("Archive.zip")),
+            "Compressing 'Archive.zip'"
+        );
     }
 
     #[test]
@@ -554,6 +565,10 @@ mod tests {
         assert_eq!(
             operation_kind_icon(OperationKind::Restore),
             "edit-undo-symbolic"
+        );
+        assert_eq!(
+            operation_kind_icon(OperationKind::Compress),
+            "package-x-generic-symbolic"
         );
     }
 }

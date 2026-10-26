@@ -7,6 +7,7 @@ use gdk4::prelude::*;
 use gtk4::prelude::*;
 use shared::models::operation::{BatchOperation, OperationKind};
 
+use crate::archive::ArchiveFormat;
 use crate::breadcrumbs::parse_uri_list;
 use crate::coordinator::NavigationCoordinator;
 
@@ -103,7 +104,7 @@ pub fn attach_row_context_menu(
         ));
 
         // 4. Tags...
-        let row_anchor = row_widget;
+        let row_anchor = row_widget.clone();
         let p_tags = target_paths.clone();
         let pop_tags = popover.clone();
         menu_box.append(&create_menu_button("Tags...", "", &popover, move || {
@@ -180,6 +181,84 @@ pub fn attach_row_context_menu(
             &popover,
             move || {
                 let _ = c_dup.duplicate_paths(p_dup.clone());
+            },
+        ));
+
+        // 8b. Compress
+        let c_compress = Rc::clone(&coord);
+        let p_compress = target_paths.clone();
+        let compress_title = if target_paths.len() > 1 {
+            format!("Compress {} Items", target_paths.len())
+        } else {
+            let name = item_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Item");
+            format!("Compress \"{name}\"")
+        };
+        menu_box.append(&create_menu_button_with_icon(
+            &compress_title,
+            "Ctrl+Shift+C",
+            Some("package-x-generic-symbolic"),
+            &popover,
+            move || {
+                let _ = c_compress.compress_paths(p_compress.clone(), None);
+            },
+        ));
+
+        // 8c. Compress As...
+        let c_compress_as = Rc::clone(&coord);
+        let p_compress_as = target_paths.clone();
+        let pop_compress_as = popover.clone();
+        let row_anchor_compress = row_widget;
+        menu_box.append(&create_menu_button_with_icon(
+            "Compress As…",
+            "",
+            Some("package-x-generic-symbolic"),
+            &popover,
+            move || {
+                pop_compress_as.popdown();
+                let sub_pop = gtk4::Popover::builder()
+                    .has_arrow(true)
+                    .autohide(true)
+                    .css_classes(["context-menu-popover"])
+                    .build();
+                sub_pop.set_parent(&row_anchor_compress);
+
+                let sub_box = gtk4::Box::builder()
+                    .orientation(gtk4::Orientation::Vertical)
+                    .spacing(2)
+                    .margin_start(4)
+                    .margin_end(4)
+                    .margin_top(4)
+                    .margin_bottom(4)
+                    .build();
+
+                for fmt in [
+                    ArchiveFormat::Zip,
+                    ArchiveFormat::TarGz,
+                    ArchiveFormat::TarXz,
+                    ArchiveFormat::TarZst,
+                ] {
+                    let c_fmt = Rc::clone(&c_compress_as);
+                    let p_fmt = p_compress_as.clone();
+                    let s_pop = sub_pop.clone();
+                    sub_box.append(&create_menu_button(
+                        fmt.display_name(),
+                        "",
+                        &sub_pop,
+                        move || {
+                            s_pop.popdown();
+                            let _ = c_fmt.compress_paths(p_fmt.clone(), Some(fmt));
+                        },
+                    ));
+                }
+
+                sub_pop.set_child(Some(&sub_box));
+                sub_pop.connect_closed(|p| {
+                    p.unparent();
+                });
+                sub_pop.popup();
             },
         ));
 
