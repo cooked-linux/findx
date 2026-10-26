@@ -329,6 +329,13 @@ impl FinderHeaderBar {
         });
     }
 
+    /// Connects a handler invoked when the search is stopped (Escape key).
+    pub fn connect_stop_search<F: Fn() + 'static>(&self, callback: F) {
+        self.search_entry.connect_stop_search(move |_| {
+            callback();
+        });
+    }
+
     /// Connects a handler invoked when the Quick Look button is clicked.
     pub fn connect_quicklook<F: Fn() + 'static>(&self, callback: F) {
         self.quick_look_btn.connect_clicked(move |_| {
