@@ -33,6 +33,7 @@ jobs:
             libadwaita-1-dev \
             libwayland-dev \
             wayland-protocols \
+            libarchive-dev \
             meson \
             ninja-build
           if sudo apt-get install -y libgtk4-layer-shell-dev 2>/dev/null; then
