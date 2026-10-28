@@ -113,6 +113,14 @@ fn test_format_operation_title_comprehensive() {
         format_operation_title(OperationKind::Delete, 1, None),
         "Deleting 1 item"
     );
+    assert_eq!(
+        format_operation_title(OperationKind::Compress, 12, None),
+        "Compressing 12 items"
+    );
+    assert_eq!(
+        format_operation_title(OperationKind::Compress, 1, Some("Archive.zip")),
+        "Compressing 'Archive.zip'"
+    );
 }
 
 #[test]
@@ -178,6 +186,10 @@ fn test_operation_kind_icons() {
     assert_eq!(
         operation_kind_icon(OperationKind::Restore),
         "edit-undo-symbolic"
+    );
+    assert_eq!(
+        operation_kind_icon(OperationKind::Compress),
+        "package-x-generic-symbolic"
     );
 }
 

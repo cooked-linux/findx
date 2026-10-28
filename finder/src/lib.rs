@@ -1,6 +1,7 @@
 //! Finder desktop file manager application and library crate.
 
 pub mod app;
+pub mod archive;
 pub mod bookmarks;
 pub mod breadcrumbs;
 pub mod coordinator;
@@ -20,9 +21,15 @@ pub mod undo;
 pub mod views;
 
 pub use app::{FINDER_APP_ID, FinderApp, FinderCliArgs};
+pub use archive::{
+    ArchiveCompressionJob, ArchiveEntryItem, ArchiveError, ArchiveFormat, ArchiveManifest,
+    ArchiveProgress, ArchiveWriter, compress_selection,
+};
 pub use bookmarks::{BookmarkEntry, default_places, load_user_bookmarks, save_user_bookmarks};
 pub use breadcrumbs::{BreadcrumbDisplayItem, BreadcrumbLineage, PathSegment, layout_segments};
-pub use coordinator::{NavigationCoordinator, PathChangedCallback, SelectionChangedCallback};
+pub use coordinator::{
+    NavigationCoordinator, PathChangedCallback, RenameRequestedCallback, SelectionChangedCallback,
+};
 pub use error::{FinderError, Result};
 pub use metadata::{
     DeepMetadata, ExtendedAttributesService, MetadataError, MultiSelectionSummary,

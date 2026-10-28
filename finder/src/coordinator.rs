@@ -6,8 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use gtk4::prelude::*;
 
+use crate::archive::ArchiveFormat;
 use crate::history::NavigationHistory;
-use crate::operations::{FolderSizeManager, OperationsQueue};
+use crate::operations::{FolderSizeManager, OperationEvent, OperationsQueue};
 use crate::quicklook::QuickLookEngine;
 use crate::smart_folders::{
     CriteriaGroup, Result as SmartFolderResult, SmartFolderDefinition, SmartFolderEngine,
@@ -24,6 +25,9 @@ pub type PathChangedCallback = Box<dyn Fn(&Path)>;
 
 /// Callback invoked when the active selection changes.
 pub type SelectionChangedCallback = Box<dyn Fn(Option<&Path>)>;
+
+/// Callback invoked when an item is requested to enter inline rename mode.
+pub type RenameRequestedCallback = Box<dyn Fn(&Path)>;
 
 /// Clipboard buffer state tracking files copied or cut by user action.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +48,10 @@ pub struct NavigationCoordinator {
     pub on_path_changed: RefCell<Vec<PathChangedCallback>>,
     /// Registered callbacks notified when active selected item changes.
     pub on_selection_changed: RefCell<Vec<SelectionChangedCallback>>,
+    /// Registered callbacks notified when an item is requested to enter inline rename mode.
+    pub on_rename_requested: std::rc::Rc<RefCell<Vec<RenameRequestedCallback>>>,
+    /// Pending archive path awaiting inline rename highlight, if any.
+    pub pending_rename: std::rc::Rc<RefCell<Option<PathBuf>>>,
     /// Current selected item or directory leaf, if any.
     pub active_selection: RefCell<Option<PathBuf>>,
     /// All currently selected filesystem paths supporting multi-selection.
@@ -102,6 +110,10 @@ impl std::fmt::Debug for NavigationCoordinator {
                 "on_selection_changed_count",
                 &self.on_selection_changed.borrow().len(),
             )
+            .field(
+                "on_rename_requested_count",
+                &self.on_rename_requested.borrow().len(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -120,6 +132,8 @@ impl NavigationCoordinator {
             current_mode: RefCell::new(ViewMode::Columns),
             on_path_changed: RefCell::new(Vec::new()),
             on_selection_changed: RefCell::new(Vec::new()),
+            on_rename_requested: std::rc::Rc::new(RefCell::new(Vec::new())),
+            pending_rename: std::rc::Rc::new(RefCell::new(None)),
             active_selection: RefCell::new(None),
             active_selection_paths: RefCell::new(Vec::new()),
             quicklook_engine: Arc::new(QuickLookEngine::new()),
@@ -264,6 +278,33 @@ impl NavigationCoordinator {
         self.on_selection_changed
             .borrow_mut()
             .push(Box::new(callback));
+    }
+
+    /// Registers a callback notified when an item enters inline rename mode.
+    pub fn connect_rename_requested<F: Fn(&Path) + 'static>(&self, callback: F) {
+        self.on_rename_requested
+            .borrow_mut()
+            .push(Box::new(callback));
+    }
+
+    /// Triggers inline rename mode for the given item path across registered listeners.
+    pub fn trigger_rename(&self, path: &Path) {
+        self.set_selection(Some(path));
+        *self.pending_rename.borrow_mut() = Some(path.to_path_buf());
+        for cb in self.on_rename_requested.borrow().iter() {
+            cb(path);
+        }
+    }
+
+    /// Returns the pending rename path if one is queued.
+    #[must_use]
+    pub fn pending_rename(&self) -> Option<PathBuf> {
+        self.pending_rename.borrow().clone()
+    }
+
+    /// Clears the pending rename queue.
+    pub fn clear_pending_rename(&self) {
+        *self.pending_rename.borrow_mut() = None;
     }
 
     /// Navigates to a new directory path, updating history and dispatching path & selection notifications.
@@ -613,6 +654,81 @@ impl NavigationCoordinator {
         let op = BatchOperation::new(op_id, OperationKind::Delete, paths, None);
         Some(self.operations_queue.enqueue_operation(op))
     }
+
+    /// Compresses the currently selected items using the specified archive format (or default ZIP).
+    pub fn compress_selection(&self, format: Option<ArchiveFormat>) -> Option<String> {
+        let paths = self.selected_paths();
+        if paths.is_empty() {
+            self.selection()
+                .and_then(|sel| self.compress_paths(vec![sel], format))
+        } else {
+            self.compress_paths(paths, format)
+        }
+    }
+
+    /// Compresses the given paths into an archive, scheduling the task via `operations_queue`.
+    pub fn compress_paths(
+        &self,
+        paths: Vec<PathBuf>,
+        format: Option<ArchiveFormat>,
+    ) -> Option<String> {
+        if paths.is_empty() {
+            return None;
+        }
+
+        let dest_dir = paths[0]
+            .parent()
+            .unwrap_or_else(|| Path::new("/"))
+            .to_path_buf();
+        let fmt = format.unwrap_or_default();
+        let final_archive_path = crate::archive::determine_archive_path(&dest_dir, &paths, fmt);
+        let op_id = format!("compress-{}", uuid::Uuid::new_v4());
+
+        let op = BatchOperation::new(
+            op_id,
+            OperationKind::Compress,
+            paths,
+            Some(final_archive_path.clone()),
+        );
+
+        let task_id = self.operations_queue.enqueue_operation(op);
+
+        // When compression finishes, select final_archive_path and request inline rename mode
+        self.request_post_compression_highlight(task_id.clone(), final_archive_path);
+
+        Some(task_id)
+    }
+
+    fn request_post_compression_highlight(&self, task_id: String, final_path: PathBuf) {
+        let events = self.operations_queue.subscribe_events();
+        let on_rename_list = std::rc::Rc::clone(&self.on_rename_requested);
+        let pending = std::rc::Rc::clone(&self.pending_rename);
+
+        let pump = async move {
+            while let Ok(event) = events.recv().await {
+                match event {
+                    OperationEvent::Completed { ref operation_id } if operation_id == &task_id => {
+                        *pending.borrow_mut() = Some(final_path.clone());
+                        for cb in on_rename_list.borrow().iter() {
+                            cb(&final_path);
+                        }
+                        break;
+                    }
+                    OperationEvent::Cancelled { ref operation_id }
+                    | OperationEvent::Failed {
+                        ref operation_id, ..
+                    } if operation_id == &task_id => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        if gtk4::glib::MainContext::default().is_owner() {
+            gtk4::glib::spawn_future_local(pump);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -752,6 +868,11 @@ mod tests {
         let del_id = coordinator.delete_selection_permanently(true);
         assert!(del_id.is_some());
 
+        // Compress
+        assert_eq!(coordinator.compress_paths(vec![], None), None);
+        let comp_id = coordinator.compress_selection(Some(ArchiveFormat::Zip));
+        assert!(comp_id.is_some());
+
         // Undo & redo initial state
         assert!(!coordinator.can_undo());
         assert!(!coordinator.can_redo());
@@ -759,5 +880,22 @@ mod tests {
         assert_eq!(coordinator.redo_label(), None);
         assert!(coordinator.undo().is_ok());
         assert!(coordinator.redo().is_ok());
+    }
+
+    #[test]
+    fn test_coordinator_rename_requested_callback() {
+        let coordinator = NavigationCoordinator::new("/tmp");
+        let renamed = Rc::new(RefCell::new(None));
+        let r_clone = Rc::clone(&renamed);
+
+        coordinator.connect_rename_requested(move |path| {
+            *r_clone.borrow_mut() = Some(path.to_path_buf());
+        });
+
+        let target = Path::new("/tmp/test.zip");
+        coordinator.trigger_rename(target);
+
+        assert_eq!(*renamed.borrow(), Some(target.to_path_buf()));
+        assert_eq!(coordinator.selection(), Some(target.to_path_buf()));
     }
 }
