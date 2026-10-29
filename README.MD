@@ -1,5 +1,7 @@
 NOTE: I HAVE NOT REACHED AN MVP YET
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/asuntx/badge.svg)](https://hub.xerj.org/contributors/asuntx)
+
 # Findx
 
 Findx brings the Finder and Spotlight experience from macOS to Linux. It aims to provide a familiar file navigation and search workflow for Linux users while preserving the speed, simplicity, and p[...]
